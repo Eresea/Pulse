@@ -20,9 +20,8 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-black" edges={["top"]}>
-      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-3">
+      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-20">
         <View className="gap-2">
-          <Text className="text-3xl font-bold text-foreground dark:text-slate-100">Settings</Text>
           <Text className="text-base text-muted-foreground dark:text-slate-400">Debug the Roots connection and update state.</Text>
         </View>
 

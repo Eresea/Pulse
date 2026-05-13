@@ -16,9 +16,8 @@ export default function InboxScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-black" edges={["top"]}>
-      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-3">
+      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-20">
         <View className="gap-2">
-          <Text className="text-3xl font-bold text-foreground dark:text-slate-100">Inbox</Text>
           <Text className="text-base text-muted-foreground dark:text-slate-400">
             Event streams will land here before being routed into focused screens.
           </Text>

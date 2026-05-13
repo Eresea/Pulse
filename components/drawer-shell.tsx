@@ -39,10 +39,21 @@ const profileDestination: DrawerDestination = {
   match: (pathname) => pathname.includes("/settings"),
 };
 
+function getPageTitle(pathname: string) {
+  if (pathname.includes("/settings")) {
+    return "Settings";
+  }
+  if (pathname.includes("/inbox")) {
+    return "Inbox";
+  }
+  return "Home";
+}
+
 export function DrawerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
+  const pageTitle = getPageTitle(pathname);
   const slideX = useRef(new Animated.Value(0)).current;
   const [open, setOpen] = useState(false);
 
@@ -147,9 +158,19 @@ export function DrawerShell({ children }: { children: ReactNode }) {
         {children}
 
         {!open ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Open menu" className="absolute left-3 top-12 size-11 items-center justify-center rounded-md border border-border bg-card dark:border-neutral-800 dark:bg-black" onPress={() => animateDrawer(true)}>
-            <Menu color={colors.foreground} size={20} />
-          </Pressable>
+          <SafeAreaView pointerEvents="box-none" className="absolute left-0 right-0 top-0" edges={["top"]}>
+            <View className="flex-row items-center gap-3 px-4 pb-2 pt-2">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open menu"
+                className="size-11 items-center justify-center rounded-full border border-border bg-card dark:border-neutral-800 dark:bg-black"
+                onPress={() => animateDrawer(true)}
+              >
+                <Menu color={colors.foreground} size={20} />
+              </Pressable>
+              <Text className="text-3xl font-bold text-foreground dark:text-slate-100">{pageTitle}</Text>
+            </View>
+          </SafeAreaView>
         ) : null}
       </Animated.View>
     </View>
