@@ -6,16 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionStatus } from "@/components/connection-status";
 import { useAppState } from "@/state/app-state";
+import { useTheme } from "@/theme/theme";
 
 export default function HomeScreen() {
   const { session, realtime, push, polling, updates, actions } = useAppState();
+  const { colors } = useTheme();
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <SafeAreaView className="flex-1 bg-background dark:bg-black" edges={["top"]}>
       <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-3">
         <View className="gap-2">
-          <Text className="text-3xl font-bold text-foreground">Pulse</Text>
-          <Text className="text-base text-muted-foreground">
+          <Text className="text-3xl font-bold text-foreground dark:text-slate-100">Pulse</Text>
+          <Text className="text-base text-muted-foreground dark:text-slate-400">
             Native Roots activity, notifications, and realtime status.
           </Text>
         </View>
@@ -27,9 +29,9 @@ export default function HomeScreen() {
             <CardTitle>Session Boundary</CardTitle>
           </CardHeader>
           <CardContent className="gap-3">
-            <StatusRow icon={ShieldCheck} label="Auth" value={session.isAuthenticated ? "Signed in" : "Guest shell"} />
-            <StatusRow icon={Radio} label="SignalR" value={realtime.status} />
-            <StatusRow icon={Smartphone} label="FCM" value={push.permissionStatus} />
+            <StatusRow icon={ShieldCheck} label="Auth" value={session.isAuthenticated ? "Signed in" : "Guest shell"} iconColor={colors.icon} />
+            <StatusRow icon={Radio} label="SignalR" value={realtime.status} iconColor={colors.icon} />
+            <StatusRow icon={Smartphone} label="FCM" value={push.permissionStatus} iconColor={colors.icon} />
             <Button onPress={actions.bootstrap} variant="default">
               Bootstrap Services
             </Button>
@@ -46,8 +48,8 @@ export default function HomeScreen() {
               <Badge variant="secondary">FCM wakeups</Badge>
               <Badge variant="outline">Polling fallback</Badge>
             </View>
-            <StatusRow icon={Activity} label="Polling" value={polling.status} />
-            <StatusRow icon={RefreshCcw} label="Updates" value={updates.status} />
+            <StatusRow icon={Activity} label="Polling" value={polling.status} iconColor={colors.icon} />
+            <StatusRow icon={RefreshCcw} label="Updates" value={updates.status} iconColor={colors.icon} />
           </CardContent>
         </Card>
       </ScrollView>
@@ -58,19 +60,21 @@ export default function HomeScreen() {
 function StatusRow({
   icon: Icon,
   label,
-  value
+  value,
+  iconColor
 }: {
   icon: React.ComponentType<{ color: string; size: number }>;
   label: string;
   value: string;
+  iconColor: string;
 }) {
   return (
     <View className="flex-row items-center justify-between gap-3">
       <View className="flex-row items-center gap-2">
-        <Icon color="#0f766e" size={18} />
-        <Text className="text-sm font-medium text-foreground">{label}</Text>
+        <Icon color={iconColor} size={18} />
+        <Text className="text-sm font-medium text-foreground dark:text-slate-100">{label}</Text>
       </View>
-      <Text className="text-sm text-muted-foreground">{value}</Text>
+      <Text className="text-sm text-muted-foreground dark:text-slate-400">{value}</Text>
     </View>
   );
 }

@@ -21,7 +21,7 @@ export function Button({
       className={cn(
         "h-11 items-center justify-center rounded-md px-4",
         variant === "default" && "bg-primary",
-        variant === "outline" && "border border-border bg-card",
+        variant === "outline" && "border border-border bg-card dark:border-neutral-800 dark:bg-black",
         variant === "ghost" && "bg-transparent",
         disabled && "opacity-50",
         className
@@ -33,8 +33,8 @@ export function Button({
         className={cn(
           "text-sm font-semibold",
           variant === "default" && "text-primary-foreground",
-          variant === "outline" && "text-foreground",
-          variant === "ghost" && "text-foreground",
+          variant === "outline" && "text-foreground dark:text-slate-100",
+          variant === "ghost" && "text-foreground dark:text-slate-100",
           textClassName
         )}
       >
