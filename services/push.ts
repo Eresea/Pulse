@@ -2,7 +2,6 @@ import { Platform } from "react-native";
 import * as Application from "expo-application";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
-import messaging from "@react-native-firebase/messaging";
 import { appConfig } from "@/config/app-config";
 import { rootsApi } from "@/services/roots-api";
 import type { DeviceInfo } from "@/services/types";
@@ -18,8 +17,7 @@ export const pushService = {
       return { permissionStatus: permission.status };
     }
 
-    const token = await messaging().getToken();
-    return { token, permissionStatus: permission.status };
+    return { permissionStatus: "fcm-disabled-local" };
   },
 
   async registerDevice(userId: string, fcmToken?: string) {
