@@ -1,22 +1,17 @@
 import { cn } from "@/lib/cn";
+import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 import { router, usePathname } from "expo-router";
 import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, Settings, UserRound } from "lucide-react-native";
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { BackHandler, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
-import Animated, {
-  cancelAnimation,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 type DrawerDestination = {
   label: string;
-  href: "/(tabs)" | "/(tabs)/inbox" | "/(tabs)/settings";
+  href: "/(tabs)" | "/(tabs)/inbox" | "/(tabs)/profile" | "/(tabs)/settings";
   icon: React.ComponentType<{ color: string; size: number }>;
   match: (pathname: string) => boolean;
 };
@@ -43,11 +38,13 @@ const mainDestinations: DrawerDestination[] = [
 ];
 
 const profileDestination: DrawerDestination = {
-  label: "Profile / Settings",
-  href: "/(tabs)/settings",
-  icon: Settings,
-  match: (pathname) => pathname.includes("/settings"),
+  label: "Profile",
+  href: "/(tabs)/profile",
+  icon: UserRound,
+  match: (pathname) => pathname.includes("/profile"),
 };
+
+const drawerRoutes = [...mainDestinations.map((item) => item.href), profileDestination.href, "/(tabs)/settings" as const];
 
 export function useDrawerShell() {
   const context = useContext(DrawerShellContext);
@@ -65,12 +62,7 @@ export function PageHeader({ title }: { title: string }) {
 
   return (
     <View className="flex-row items-center gap-3 px-4 pb-2 pt-2">
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Open menu"
-        className="size-11 items-center justify-center rounded-full border border-border bg-card dark:border-neutral-800 dark:bg-black"
-        onPress={openMenu}
-      >
+      <Pressable accessibilityRole="button" accessibilityLabel="Open menu" className="size-11 items-center justify-center rounded-full border border-border bg-card dark:border-neutral-800 dark:bg-black" onPress={openMenu}>
         <Menu color={colors.foreground} size={20} />
       </Pressable>
       <Text className="text-3xl font-bold text-foreground dark:text-slate-100">{title}</Text>
@@ -81,8 +73,11 @@ export function PageHeader({ title }: { title: string }) {
 export function DrawerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { session, actions } = useAppState();
   const { width: screenWidth } = useWindowDimensions();
   const { colors } = useTheme();
+  const profileLabel = session.user?.name || session.user?.email || "Profile";
+  const profileSubLabel = session.user?.providers.length ? `${session.user.providers.length} connected provider${session.user.providers.length === 1 ? "" : "s"}` : "Account details";
   const slideX = useSharedValue(0);
   const dragStartX = useSharedValue(0);
   const [open, setOpen] = useState(false);
@@ -96,7 +91,8 @@ export function DrawerShell({ children }: { children: ReactNode }) {
       slideX.value = withTiming(
         nextOpen ? screenWidth : 0,
         {
-          duration: 170,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
         },
         (finished) => {
           if (finished) {
@@ -110,7 +106,14 @@ export function DrawerShell({ children }: { children: ReactNode }) {
 
   const openMenu = useCallback(() => {
     snapTo(true);
-  }, [snapTo]);
+
+    requestAnimationFrame(() => {
+      drawerRoutes.forEach((href) => {
+        router.prefetch(href);
+      });
+      void actions.prefetchUser();
+    });
+  }, [actions, snapTo]);
 
   const closeMenu = useCallback(() => {
     snapTo(false);
@@ -159,7 +162,8 @@ export function DrawerShell({ children }: { children: ReactNode }) {
           slideX.value = withTiming(
             nextOpen ? screenWidth : 0,
             {
-              duration: 170,
+              duration: 220,
+              easing: Easing.out(Easing.cubic),
             },
             (finished) => {
               if (finished) {
@@ -183,8 +187,11 @@ export function DrawerShell({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => ({ openMenu }), [openMenu]);
 
   const navigate = (href: DrawerDestination["href"]) => {
-    closeMenu();
     router.push(href);
+
+    if (open) {
+      snapTo(false);
+    }
   };
 
   return (
@@ -219,23 +226,30 @@ export function DrawerShell({ children }: { children: ReactNode }) {
                   </View>
 
                   <View className="mt-auto pt-4" style={{ paddingBottom: Math.max(insets.bottom - 8, 0) }}>
-                    <Pressable
-                      accessibilityRole="button"
-                      className={cn(
-                        "flex-row items-center gap-3 rounded-md border border-border p-3",
-                        profileDestination.match(pathname) ? "bg-primary" : "bg-background dark:bg-black",
-                      )}
-                      onPress={() => navigate(profileDestination.href)}
-                    >
-                      <View className="size-11 items-center justify-center rounded-full bg-muted dark:bg-slate-800">
-                        <UserRound color={profileDestination.match(pathname) ? colors.primaryForeground : colors.icon} size={22} />
-                      </View>
-                      <View className="min-w-0 flex-1">
-                        <Text className={cn("text-sm font-semibold", profileDestination.match(pathname) ? "text-primary-foreground" : "text-slate-100")}>Profile / Settings</Text>
-                        <Text className={cn("text-xs", profileDestination.match(pathname) ? "text-primary-foreground" : "text-muted-foreground")}>Guest profile</Text>
-                      </View>
-                      <ChevronRight color={profileDestination.match(pathname) ? colors.primaryForeground : colors.muted} size={18} />
-                    </Pressable>
+                    <View className="flex-row items-center gap-2">
+                      <Pressable accessibilityRole="button" accessibilityLabel="Open profile" className={cn("min-w-0 flex-1 flex-row items-center gap-3 rounded-md px-2 py-2", profileDestination.match(pathname) ? "bg-primary" : "bg-transparent")} onPress={() => navigate(profileDestination.href)}>
+                        {session.user?.avatarUrl ? (
+                          <Image source={{ uri: session.user.avatarUrl }} className="size-11 rounded-full bg-muted dark:bg-slate-800" />
+                        ) : (
+                          <View className="size-11 items-center justify-center rounded-full bg-muted dark:bg-slate-800">
+                            <UserRound color={profileDestination.match(pathname) ? colors.primaryForeground : colors.icon} size={22} />
+                          </View>
+                        )}
+                        <View className="min-w-0 flex-1">
+                          <Text className={cn("text-sm font-semibold", profileDestination.match(pathname) ? "text-primary-foreground" : "text-foreground dark:text-slate-100")} numberOfLines={1}>
+                            {profileLabel}
+                          </Text>
+                          <Text className={cn("text-xs", profileDestination.match(pathname) ? "text-primary-foreground" : "text-muted-foreground")} numberOfLines={1}>
+                            {profileSubLabel}
+                          </Text>
+                        </View>
+                        <ChevronRight color={profileDestination.match(pathname) ? colors.primaryForeground : colors.muted} size={18} />
+                      </Pressable>
+
+                      <Pressable accessibilityRole="button" accessibilityLabel="Open settings" className={cn("size-11 items-center justify-center rounded-full border border-border bg-card dark:border-neutral-800 dark:bg-black", pathname.includes("/settings") ? "border-primary bg-primary dark:border-primary dark:bg-primary" : undefined)} onPress={() => navigate("/(tabs)/settings")}>
+                        <Settings color={pathname.includes("/settings") ? colors.primaryForeground : colors.icon} size={22} />
+                      </Pressable>
+                    </View>
                   </View>
                 </View>
               </SafeAreaView>

@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from "react";
+import { createContext, ReactNode, useContext, useMemo, useRef, useState } from "react";
 import { authService } from "@/services/auth";
 import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
@@ -29,6 +29,7 @@ type AppState = {
     checkForUpdates: () => void;
     completeLogin: (accessToken: string, refreshToken?: string) => Promise<void>;
     loginEmail: (email: string, password: string) => Promise<void>;
+    prefetchUser: () => Promise<UserInfo | undefined>;
     refreshUser: () => Promise<UserInfo>;
     registerEmail: (email: string, password: string, displayName: string) => Promise<void>;
     signOut: () => Promise<void>;
@@ -44,6 +45,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [pollingStatus, setPollingStatus] = useState<"idle" | "running" | "error">("idle");
   const [updateStatus, setUpdateStatus] = useState("idle");
   const [user, setUser] = useState<UserInfo | undefined>();
+  const userRefreshPromise = useRef<Promise<UserInfo> | null>(null);
 
   const value = useMemo<AppState>(
     () => ({
@@ -95,8 +97,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           const nextUser = await authService.loginEmail({ email, password });
           setUser(nextUser);
         },
+        prefetchUser: async () => {
+          if (user) {
+            return user;
+          }
+
+          if (!userRefreshPromise.current) {
+            userRefreshPromise.current = authService.me()
+              .then((nextUser) => {
+                setUser(nextUser);
+                return nextUser;
+              })
+              .finally(() => {
+                userRefreshPromise.current = null;
+              });
+          }
+
+          return userRefreshPromise.current;
+        },
         refreshUser: async () => {
-          const nextUser = await authService.me();
+          if (!userRefreshPromise.current) {
+            userRefreshPromise.current = authService.me().finally(() => {
+              userRefreshPromise.current = null;
+            });
+          }
+
+          const nextUser = await userRefreshPromise.current;
           setUser(nextUser);
           return nextUser;
         },

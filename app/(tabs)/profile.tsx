@@ -36,9 +36,15 @@ export default function ProfileScreen() {
     if (didLoadProfile.current) {
       return;
     }
+    if (session.user) {
+      didLoadProfile.current = true;
+      setProfile(session.user);
+      return;
+    }
+
     didLoadProfile.current = true;
     void refreshProfile();
-  }, [refreshProfile]);
+  }, [refreshProfile, session.user]);
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-black" edges={["top"]}>

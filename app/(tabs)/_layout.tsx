@@ -11,7 +11,7 @@ export default function TabsLayout() {
 
   return (
     <DrawerShell>
-      <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
+      <Stack screenOptions={{ headerShown: false, animation: "none" }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="inbox" />
         <Stack.Screen name="profile" />
