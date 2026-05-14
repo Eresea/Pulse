@@ -13,6 +13,28 @@ export type LoginEmailRequest = {
   password: string;
 };
 
+export type RegisterEmailRequest = LoginEmailRequest & {
+  displayName: string;
+};
+
+export type NexusAuthResult = {
+  accessToken?: string;
+  refreshToken?: string;
+  tokenType?: string;
+  expiresIn?: number;
+  sessionId?: string;
+  userId?: string;
+  mfaRequired?: boolean;
+  mfaTicket?: string;
+};
+
+export type NexusUser = {
+  id: string;
+  email?: string;
+  displayName?: string;
+  emailVerified?: boolean;
+};
+
 export type DeviceInfo = {
   deviceId: string;
   fcmToken?: string;

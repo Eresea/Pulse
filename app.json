@@ -41,7 +41,7 @@
     },
     "extra": {
       "roots": {
-        "apiBaseUrl": "https://roots.eresea.net",
+        "apiBaseUrl": "https://nexus.eresea.net",
         "updateChannel": "production",
         "pollingIntervalMs": 30000
       }

@@ -1,11 +1,13 @@
 import { router } from "expo-router";
-import { LockKeyhole, Mail, RadioTower, UserRound } from "lucide-react-native";
+import * as Linking from "expo-linking";
+import { Chrome, LockKeyhole, Mail, RadioTower, UserRound } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, KeyboardAvoidingView, Platform, Text, View } from "react-native";
+import { Animated, Easing, KeyboardAvoidingView, Platform, Text, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { appConfig } from "@/config/app-config";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 
@@ -36,17 +38,71 @@ export default function LoginScreen() {
     }
   }, [session.isAuthenticated]);
 
+  useEffect(() => {
+    const handleUrl = ({ url }: { url: string }) => {
+      const parsed = Linking.parse(url);
+      if (parsed.hostname !== "auth" || parsed.path !== "callback") {
+        return;
+      }
+      const accessToken = typeof parsed.queryParams?.accessToken === "string" ? parsed.queryParams.accessToken : undefined;
+      const refreshToken = typeof parsed.queryParams?.refreshToken === "string" ? parsed.queryParams.refreshToken : undefined;
+      const errorMessage = typeof parsed.queryParams?.error === "string" ? parsed.queryParams.error : undefined;
+
+      if (errorMessage) {
+        setError(errorMessage);
+        return;
+      }
+      if (!accessToken) {
+        setError("Google sign-in did not return a Nexus session.");
+        return;
+      }
+
+      setSubmitting(true);
+      void actions
+        .completeLogin(accessToken, refreshToken)
+        .then(() => router.replace("/(tabs)/inbox"))
+        .catch((err) => setError(err instanceof Error ? err.message : "Unable to complete Google sign-in."))
+        .finally(() => setSubmitting(false));
+    };
+
+    const subscription = Linking.addEventListener("url", handleUrl);
+    void Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleUrl({ url });
+      }
+    });
+    return () => subscription.remove();
+  }, [actions]);
+
   const submit = async () => {
     setError("");
     setSubmitting(true);
     try {
       if (mode === "subscribe") {
-        throw new Error("Subscription signup is not connected yet.");
+        await actions.registerEmail(email.trim(), password, displayName.trim());
+        setMode("login");
+        setPassword("");
+        setError("Account created. Check your email to verify it before signing in.");
+        return;
       }
       await actions.loginEmail(email.trim(), password);
       router.replace("/(tabs)/inbox");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const loginGoogle = async () => {
+    setError("");
+    setSubmitting(true);
+    try {
+      const callbackUrl = Linking.createURL("auth/callback");
+      const params = new URLSearchParams({ client_id: appConfig.auth.clientId, redirect_uri: callbackUrl });
+      await Linking.openURL(`${appConfig.apiBaseUrl}${appConfig.auth.loginGoogle}?${params.toString()}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to start Google sign-in.");
     } finally {
       setSubmitting(false);
     }
@@ -112,6 +168,16 @@ export default function LoginScreen() {
                 <Button className="h-12" disabled={!ready} onPress={submit}>
                   {submitting ? "Please wait..." : actionLabel}
                 </Button>
+
+                <Pressable
+                  accessibilityRole="button"
+                  className="h-12 flex-row items-center justify-center gap-2 rounded-md border border-border bg-card px-4 dark:border-neutral-800 dark:bg-black"
+                  disabled={submitting}
+                  onPress={loginGoogle}
+                >
+                  <Chrome color={colors.foreground} size={18} />
+                  <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Continue with Google</Text>
+                </Pressable>
 
                 <Button
                   variant="ghost"

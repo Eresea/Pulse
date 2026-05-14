@@ -27,7 +27,9 @@ type AppState = {
   actions: {
     bootstrap: () => void;
     checkForUpdates: () => void;
+    completeLogin: (accessToken: string, refreshToken?: string) => Promise<void>;
     loginEmail: (email: string, password: string) => Promise<void>;
+    registerEmail: (email: string, password: string, displayName: string) => Promise<void>;
     signOut: () => Promise<void>;
   };
 };
@@ -84,9 +86,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             .then((result) => setUpdateStatus(result.status))
             .catch(() => setUpdateStatus("error"));
         },
+        completeLogin: async (accessToken: string, refreshToken?: string) => {
+          const nextUser = await authService.completeLogin({ accessToken, refreshToken, tokenType: "Bearer" });
+          setUser(nextUser);
+        },
         loginEmail: async (email: string, password: string) => {
           const nextUser = await authService.loginEmail({ email, password });
           setUser(nextUser);
+        },
+        registerEmail: async (email: string, password: string, displayName: string) => {
+          await authService.registerEmail({ email, password, displayName });
         },
         signOut: async () => {
           await authService.signOut();
