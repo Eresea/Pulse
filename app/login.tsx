@@ -1,19 +1,22 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { Chrome, LockKeyhole, Mail, RadioTower, UserRound } from "lucide-react-native";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Animated, Easing, KeyboardAvoidingView, Platform, Text, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { appConfig } from "@/config/app-config";
+import { parseAuthCallbackUrl } from "@/services/auth-callback";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 
 export default function LoginScreen() {
   const { session, actions } = useAppState();
   const { colors } = useTheme();
+  const params = useLocalSearchParams();
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
@@ -39,32 +42,32 @@ export default function LoginScreen() {
   }, [session.isAuthenticated]);
 
   useEffect(() => {
-    const handleUrl = ({ url }: { url: string }) => {
-      const parsed = Linking.parse(url);
-      if (parsed.hostname !== "auth" || parsed.path !== "callback") {
-        return;
-      }
-      const accessToken = typeof parsed.queryParams?.accessToken === "string" ? parsed.queryParams.accessToken : undefined;
-      const refreshToken = typeof parsed.queryParams?.refreshToken === "string" ? parsed.queryParams.refreshToken : undefined;
-      const errorMessage = typeof parsed.queryParams?.error === "string" ? parsed.queryParams.error : undefined;
+    if (typeof params.error === "string") {
+      setError(params.error);
+    }
+  }, [params.error]);
 
-      if (errorMessage) {
-        setError(errorMessage);
-        return;
-      }
-      if (!accessToken) {
-        setError("Google sign-in did not return a Nexus session.");
-        return;
-      }
+  const handleUrl = useCallback(({ url }: { url: string }) => {
+    let payload;
+    try {
+      payload = parseAuthCallbackUrl(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to complete Google sign-in.");
+      return;
+    }
+    if (!payload) {
+      return;
+    }
 
-      setSubmitting(true);
-      void actions
-        .completeLogin(accessToken, refreshToken)
-        .then(() => router.replace("/(tabs)/inbox"))
-        .catch((err) => setError(err instanceof Error ? err.message : "Unable to complete Google sign-in."))
-        .finally(() => setSubmitting(false));
-    };
+    setSubmitting(true);
+    void actions
+      .completeLogin(payload.accessToken, payload.refreshToken)
+      .then(() => router.replace("/(tabs)/inbox"))
+      .catch((err) => setError(err instanceof Error ? err.message : "Unable to complete Google sign-in."))
+      .finally(() => setSubmitting(false));
+  }, [actions]);
 
+  useEffect(() => {
     const subscription = Linking.addEventListener("url", handleUrl);
     void Linking.getInitialURL().then((url) => {
       if (url) {
@@ -72,7 +75,7 @@ export default function LoginScreen() {
       }
     });
     return () => subscription.remove();
-  }, [actions]);
+  }, [handleUrl]);
 
   const submit = async () => {
     setError("");
@@ -98,9 +101,14 @@ export default function LoginScreen() {
     setError("");
     setSubmitting(true);
     try {
-      const callbackUrl = Linking.createURL("auth/callback");
+      const callbackUrl = "pulse://auth/callback";
       const params = new URLSearchParams({ client_id: appConfig.auth.clientId, redirect_uri: callbackUrl });
-      await Linking.openURL(`${appConfig.apiBaseUrl}${appConfig.auth.loginGoogle}?${params.toString()}`);
+      const result = await WebBrowser.openAuthSessionAsync(`${appConfig.apiBaseUrl}${appConfig.auth.loginGoogle}?${params.toString()}`, callbackUrl);
+      if (result.type === "success") {
+        handleUrl({ url: result.url });
+      } else if (result.type === "cancel") {
+        setError("Google sign-in was cancelled.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to start Google sign-in.");
     } finally {

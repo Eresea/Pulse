@@ -36,6 +36,7 @@ Pulse uses shadcn-style composition adapted to React Native through NativeWind a
 
 ## Color And Type
 
+- Dark theme: amoled slate glass.
 - Base background: light neutral.
 - Primary action/status: teal.
 - Secondary information: slate gray.
