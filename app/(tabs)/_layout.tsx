@@ -1,7 +1,14 @@
-import { Stack } from "expo-router";
+import { Redirect, Stack } from "expo-router";
 import { DrawerShell } from "@/components/drawer-shell";
+import { useAppState } from "@/state/app-state";
 
 export default function TabsLayout() {
+  const { session } = useAppState();
+
+  if (!session.isAuthenticated) {
+    return <Redirect href="/login" />;
+  }
+
   return (
     <DrawerShell>
       <Stack screenOptions={{ headerShown: false, animation: "fade" }}>

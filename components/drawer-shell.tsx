@@ -2,13 +2,9 @@ import { cn } from "@/lib/cn";
 import { useTheme } from "@/theme/theme";
 import { router, usePathname } from "expo-router";
 import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, Settings, UserRound } from "lucide-react-native";
-import { ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { Animated, Dimensions, PanResponder, Pressable, Text, View } from "react-native";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, PanResponder, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-
-const screenWidth = Dimensions.get("window").width;
-const pageWidth = screenWidth;
-const openThreshold = pageWidth * 0.14;
 
 type DrawerDestination = {
   label: string;
@@ -52,23 +48,32 @@ function getPageTitle(pathname: string) {
 export function DrawerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const { colors } = useTheme();
   const pageTitle = getPageTitle(pathname);
+  const drawerWidth = Math.min(screenWidth * 0.86, 360);
+  const openThreshold = drawerWidth * 0.28;
   const slideX = useRef(new Animated.Value(0)).current;
   const [open, setOpen] = useState(false);
 
+  useEffect(() => {
+    slideX.setValue(open ? drawerWidth : 0);
+  }, [drawerWidth, open, slideX]);
+
   const animateDrawer = useCallback(
     (nextOpen: boolean) => {
-      setOpen(nextOpen);
       Animated.spring(slideX, {
-        toValue: nextOpen ? pageWidth : 0,
+        toValue: nextOpen ? drawerWidth : 0,
         useNativeDriver: true,
-        damping: 25,
-        stiffness: 300,
-        mass: 0.9,
-      }).start();
+        damping: 28,
+        stiffness: 260,
+        mass: 0.75,
+        overshootClamping: true,
+        restDisplacementThreshold: 0.5,
+        restSpeedThreshold: 0.5,
+      }).start(() => setOpen(nextOpen));
     },
-    [slideX],
+    [drawerWidth, slideX],
   );
 
   const panResponder = useMemo(
@@ -81,17 +86,17 @@ export function DrawerShell({ children }: { children: ReactNode }) {
           return horizontal && (openingSwipe || closingSwipe);
         },
         onPanResponderMove: (_, gesture) => {
-          const next = Math.min(pageWidth, Math.max(0, (open ? pageWidth : 0) + gesture.dx));
+          const next = Math.min(drawerWidth, Math.max(0, (open ? drawerWidth : 0) + gesture.dx));
           slideX.setValue(next);
         },
         onPanResponderRelease: (_, gesture) => {
-          const next = Math.min(pageWidth, Math.max(0, (open ? pageWidth : 0) + gesture.dx));
-          const projectedOpen = open ? !(gesture.vx < -0.18 || next < pageWidth - openThreshold) : gesture.vx > 0.18 || next > openThreshold;
+          const next = Math.min(drawerWidth, Math.max(0, (open ? drawerWidth : 0) + gesture.dx));
+          const projectedOpen = open ? !(gesture.vx < -0.18 || next < drawerWidth - openThreshold) : gesture.vx > 0.18 || next > openThreshold;
           animateDrawer(projectedOpen);
         },
         onPanResponderTerminate: () => animateDrawer(open),
       }),
-    [animateDrawer, open, slideX],
+    [animateDrawer, drawerWidth, open, openThreshold, slideX],
   );
 
   const navigate = (href: DrawerDestination["href"]) => {
@@ -99,11 +104,16 @@ export function DrawerShell({ children }: { children: ReactNode }) {
     router.push(href);
   };
 
-  const drawerTranslateX = Animated.subtract(slideX, pageWidth);
+  const drawerTranslateX = Animated.subtract(slideX, drawerWidth);
 
   return (
     <View className="flex-1 overflow-hidden bg-background dark:bg-black" {...panResponder.panHandlers}>
-      <Animated.View className="absolute bottom-0 left-0 top-0 bg-card dark:bg-black" style={{ width: pageWidth, transform: [{ translateX: drawerTranslateX }] }}>
+      <Animated.View
+        className="absolute bottom-0 left-0 top-0 bg-card dark:bg-black"
+        renderToHardwareTextureAndroid
+        shouldRasterizeIOS
+        style={{ width: drawerWidth, transform: [{ translateX: drawerTranslateX }] }}
+      >
         <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
           <View className="flex-1 px-4 pb-4 pt-2">
             <View className="mb-5">
@@ -147,12 +157,13 @@ export function DrawerShell({ children }: { children: ReactNode }) {
 
       <Animated.View
         className="absolute inset-0 bg-background dark:bg-black"
+        renderToHardwareTextureAndroid
         style={{
           transform: [{ translateX: slideX }],
           shadowColor: "#000",
-          shadowOpacity: open ? 0.12 : 0,
+          shadowOpacity: 0.12,
           shadowRadius: 14,
-          elevation: open ? 8 : 0,
+          elevation: 8,
         }}
       >
         {children}

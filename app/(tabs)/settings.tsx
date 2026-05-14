@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import { router } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,14 @@ export default function SettingsScreen() {
             <SettingRow label="Updates" value={updates.status} />
             <Button onPress={actions.checkForUpdates} variant="outline">
               Check for Updates
+            </Button>
+            <Button
+              onPress={() => {
+                void actions.signOut().then(() => router.replace("/login"));
+              }}
+              variant="ghost"
+            >
+              Sign Out
             </Button>
           </CardContent>
         </Card>
