@@ -3,7 +3,7 @@ import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 import { router, usePathname } from "expo-router";
 import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, Settings, UserRound } from "lucide-react-native";
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -15,6 +15,8 @@ type DrawerDestination = {
   icon: React.ComponentType<{ color: string; size: number }>;
   match: (pathname: string) => boolean;
 };
+
+type PrimaryDrawerHref = "/(tabs)" | "/(tabs)/inbox";
 
 type DrawerShellContextValue = {
   openMenu: () => void;
@@ -45,6 +47,18 @@ const profileDestination: DrawerDestination = {
 };
 
 const drawerRoutes = [...mainDestinations.map((item) => item.href), profileDestination.href, "/(tabs)/settings" as const];
+
+function getPrimaryHref(pathname: string): PrimaryDrawerHref | undefined {
+  if (pathname.includes("/inbox")) {
+    return "/(tabs)/inbox";
+  }
+
+  if (pathname === "/" || pathname === "/(tabs)") {
+    return "/(tabs)";
+  }
+
+  return undefined;
+}
 
 export function useDrawerShell() {
   const context = useContext(DrawerShellContext);
@@ -80,11 +94,30 @@ export function DrawerShell({ children }: { children: ReactNode }) {
   const profileSubLabel = session.user?.providers.length ? `${session.user.providers.length} connected provider${session.user.providers.length === 1 ? "" : "s"}` : "Account details";
   const slideX = useSharedValue(0);
   const dragStartX = useSharedValue(0);
+  const lastPrimaryHref = useRef<PrimaryDrawerHref>("/(tabs)");
   const [open, setOpen] = useState(false);
 
   const setOpenState = useCallback((nextOpen: boolean) => {
     setOpen(nextOpen);
   }, []);
+
+  useEffect(() => {
+    const primaryHref = getPrimaryHref(pathname);
+
+    if (primaryHref) {
+      lastPrimaryHref.current = primaryHref;
+    }
+  }, [pathname]);
+
+  const restorePrimaryRoute = useCallback(() => {
+    if (!getPrimaryHref(pathname)) {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace(lastPrimaryHref.current);
+      }
+    }
+  }, [pathname]);
 
   const snapTo = useCallback(
     (nextOpen: boolean) => {
@@ -112,8 +145,9 @@ export function DrawerShell({ children }: { children: ReactNode }) {
         router.prefetch(href);
       });
       void actions.prefetchUser();
+      restorePrimaryRoute();
     });
-  }, [actions, snapTo]);
+  }, [actions, restorePrimaryRoute, snapTo]);
 
   const closeMenu = useCallback(() => {
     snapTo(false);
@@ -168,11 +202,15 @@ export function DrawerShell({ children }: { children: ReactNode }) {
             (finished) => {
               if (finished) {
                 runOnJS(setOpenState)(nextOpen);
+
+                if (nextOpen) {
+                  runOnJS(restorePrimaryRoute)();
+                }
               }
             },
           );
         }),
-    [dragStartX, screenWidth, setOpenState, slideX],
+    [dragStartX, restorePrimaryRoute, screenWidth, setOpenState, slideX],
   );
 
   const pageStyle = useAnimatedStyle(() => ({
@@ -187,6 +225,12 @@ export function DrawerShell({ children }: { children: ReactNode }) {
   const contextValue = useMemo(() => ({ openMenu }), [openMenu]);
 
   const navigate = (href: DrawerDestination["href"]) => {
+    const primaryHref = getPrimaryHref(href);
+
+    if (primaryHref) {
+      lastPrimaryHref.current = primaryHref;
+    }
+
     router.push(href);
 
     if (open) {
