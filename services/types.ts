@@ -6,6 +6,16 @@ export type UserInfo = {
   firstName?: string;
   lastName?: string;
   name?: string;
+  avatarUrl?: string;
+  emailVerified?: boolean;
+  providers: ConnectedProvider[];
+};
+
+export type ConnectedProvider = {
+  id: string;
+  name: string;
+  email?: string;
+  connectedAt?: string;
 };
 
 export type LoginEmailRequest = {
@@ -30,9 +40,30 @@ export type NexusAuthResult = {
 
 export type NexusUser = {
   id: string;
+  userId?: string;
   email?: string;
   displayName?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string;
+  avatar?: string;
+  picture?: string;
+  imageUrl?: string;
   emailVerified?: boolean;
+  connectedProviders?: NexusProvider[];
+  providers?: NexusProvider[];
+  externalLogins?: NexusProvider[];
+};
+
+export type NexusProvider = {
+  id?: string;
+  provider?: string;
+  providerName?: string;
+  name?: string;
+  displayName?: string;
+  email?: string;
+  connectedAt?: string;
 };
 
 export type DeviceInfo = {

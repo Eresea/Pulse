@@ -1,13 +1,30 @@
 import { appConfig } from "@/config/app-config";
 import { rootsApi } from "@/services/roots-api";
 import { tokenStore } from "@/services/token-store";
-import type { LoginEmailRequest, NexusAuthResult, NexusUser, RegisterEmailRequest, UserInfo } from "@/services/types";
+import type { ConnectedProvider, LoginEmailRequest, NexusAuthResult, NexusProvider, NexusUser, RegisterEmailRequest, UserInfo } from "@/services/types";
 
 function mapNexusUser(user: NexusUser): UserInfo {
+  const providers = user.connectedProviders ?? user.providers ?? user.externalLogins ?? [];
+
   return {
-    userId: user.id,
+    userId: user.id ?? user.userId ?? "",
     email: user.email,
-    name: user.displayName
+    firstName: user.firstName,
+    lastName: user.lastName,
+    name: user.displayName ?? user.name ?? ([user.firstName, user.lastName].filter(Boolean).join(" ") || undefined),
+    avatarUrl: user.avatarUrl ?? user.imageUrl ?? user.picture ?? user.avatar,
+    emailVerified: user.emailVerified,
+    providers: providers.map(mapProvider)
+  };
+}
+
+function mapProvider(provider: NexusProvider): ConnectedProvider {
+  const id = provider.id ?? provider.provider ?? provider.providerName ?? provider.name ?? provider.displayName ?? "unknown";
+  return {
+    id,
+    name: provider.displayName ?? provider.providerName ?? provider.name ?? provider.provider ?? id,
+    email: provider.email,
+    connectedAt: provider.connectedAt
   };
 }
 

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionStatus } from "@/components/connection-status";
+import { PageHeader } from "@/components/drawer-shell";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 
@@ -14,7 +15,8 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-black" edges={["top"]}>
-      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-20">
+      <PageHeader title="Home" />
+      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-2">
         <View className="gap-2">
           <Text className="text-base text-muted-foreground dark:text-slate-400">
             Native Roots activity, notifications, and realtime status.

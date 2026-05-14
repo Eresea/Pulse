@@ -2,6 +2,7 @@ import Constants from "expo-constants";
 import { router } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { PageHeader } from "@/components/drawer-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { appConfig } from "@/config/app-config";
@@ -21,7 +22,8 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-black" edges={["top"]}>
-      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-20">
+      <PageHeader title="Settings" />
+      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-2">
         <View className="gap-2">
           <Text className="text-base text-muted-foreground dark:text-slate-400">Debug the Roots connection and update state.</Text>
         </View>
