@@ -18,6 +18,8 @@
     "@expo/vector-icons": "^15.0.3",
     "@microsoft/signalr": "^10.0.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-firebase/app": "^24.0.0",
+    "@react-native-firebase/messaging": "^24.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "expo": "^54.0.0",

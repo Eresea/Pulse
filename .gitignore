@@ -20,3 +20,6 @@ yarn-error.log*
 
 expo-env.d.ts
 # @end expo-cli
+
+./android/app/google-services.json
+./package-lock.json
