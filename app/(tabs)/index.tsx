@@ -1,6 +1,6 @@
 import { Activity, Radio, RefreshCcw, ShieldCheck, Smartphone } from "lucide-react-native";
-import { ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Text, View } from "react-native";
+import { Screen, ScreenScrollView } from "@/components/screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,9 +14,9 @@ export default function HomeScreen() {
   const { colors } = useTheme();
 
   return (
-    <SafeAreaView className="flex-1 bg-background dark:bg-black" edges={["top"]}>
+    <Screen>
       <PageHeader title="Home" />
-      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-2">
+      <ScreenScrollView>
         <View className="gap-2">
           <Text className="text-base text-muted-foreground dark:text-slate-400">
             Native Roots activity, notifications, and realtime status.
@@ -53,8 +53,8 @@ export default function HomeScreen() {
             <StatusRow icon={RefreshCcw} label="Updates" value={updates.status} iconColor={colors.icon} />
           </CardContent>
         </Card>
-      </ScrollView>
-    </SafeAreaView>
+      </ScreenScrollView>
+    </Screen>
   );
 }
 

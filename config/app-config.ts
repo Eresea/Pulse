@@ -10,7 +10,7 @@ const roots = (Constants.expoConfig?.extra?.roots ?? {}) as RootsExtra;
 
 export const appConfig = {
   apiBaseUrl: roots.apiBaseUrl ?? "https://nexus.eresea.net",
-  updateUrl: Constants.expoConfig?.updates?.url ?? "https://roots.eresea.net/api/mobile-updates/pulse",
+  updateUrl: Constants.expoConfig?.updates?.url ?? "https://nexus.eresea.net/api/mobile-updates/pulse",
   updateChannel: roots.updateChannel ?? "production",
   pollingIntervalMs: roots.pollingIntervalMs ?? 30000,
   hubs: {

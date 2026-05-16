@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useContext, useMemo, useRef, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { authService } from "@/services/auth";
 import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
@@ -46,6 +46,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [updateStatus, setUpdateStatus] = useState("idle");
   const [user, setUser] = useState<UserInfo | undefined>();
   const userRefreshPromise = useRef<Promise<UserInfo> | null>(null);
+  const autoUpdateStarted = useRef(false);
+
+  useEffect(() => {
+    if (autoUpdateStarted.current) {
+      return;
+    }
+
+    autoUpdateStarted.current = true;
+    setUpdateStatus("checking");
+    void updateService
+      .checkFetchAndReload()
+      .then((result) => setUpdateStatus(result.status))
+      .catch(() => setUpdateStatus("error"));
+  }, []);
 
   const value = useMemo<AppState>(
     () => ({

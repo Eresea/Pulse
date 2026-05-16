@@ -1,7 +1,12 @@
 import * as Updates from "expo-updates";
 
+type UpdateResult = {
+  status: "development" | "current" | "ready-to-reload" | "reloading";
+  applied: boolean;
+};
+
 export const updateService = {
-  async checkAndFetch() {
+  async checkAndFetch(): Promise<UpdateResult> {
     if (__DEV__) {
       return { status: "development", applied: false };
     }
@@ -13,6 +18,16 @@ export const updateService = {
 
     await Updates.fetchUpdateAsync();
     return { status: "ready-to-reload", applied: false };
+  },
+
+  async checkFetchAndReload(): Promise<UpdateResult> {
+    const result = await this.checkAndFetch();
+    if (result.status !== "ready-to-reload") {
+      return result;
+    }
+
+    await Updates.reloadAsync();
+    return { status: "reloading", applied: true };
   },
 
   async reload() {

@@ -7,7 +7,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 import { BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type DrawerDestination = {
   label: string;
@@ -86,7 +86,6 @@ export function PageHeader({ title }: { title: string }) {
 
 export function DrawerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const insets = useSafeAreaInsets();
   const { session, actions } = useAppState();
   const { width: screenWidth } = useWindowDimensions();
   const { colors } = useTheme();
@@ -269,7 +268,7 @@ export function DrawerShell({ children }: { children: ReactNode }) {
                     <ReservedRow icon={Bell} label="SignalR and FCM events" muted />
                   </View>
 
-                  <View className="mt-auto pt-4" style={{ paddingBottom: Math.max(insets.bottom - 8, 0) }}>
+                  <View className="mt-auto pt-4">
                     <View className="flex-row items-center gap-2">
                       <Pressable accessibilityRole="button" accessibilityLabel="Open profile" className={cn("min-w-0 flex-1 flex-row items-center gap-3 rounded-md px-2 py-2", profileDestination.match(pathname) ? "bg-primary" : "bg-transparent")} onPress={() => navigate(profileDestination.href)}>
                         {session.user?.avatarUrl ? (

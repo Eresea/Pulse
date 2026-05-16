@@ -14,7 +14,7 @@
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0,
-      "url": "https://roots.eresea.net/api/mobile-updates/pulse"
+      "url": "https://nexus.eresea.net/api/mobile-updates/pulse"
     },
     "assetBundlePatterns": ["**/*"],
     "android": {

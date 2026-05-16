@@ -1,6 +1,6 @@
 # Pulse
 
-Pulse is the Android-first native mobile companion for the Roots ecosystem. It is built with Expo React Native and connects directly to `https://roots.eresea.net` for auth, HTTP APIs, SignalR realtime events, Firebase Cloud Messaging push delivery, and polling fallback.
+Pulse is the Android-first native mobile companion for the Roots ecosystem. It is built with Expo React Native and connects directly to `https://nexus.eresea.net` for auth, HTTP APIs, SignalR realtime events, Firebase Cloud Messaging push delivery, and polling fallback.
 
 The first version is an app shell: it establishes the project structure, native UI direction, service boundaries, update policy, and debug surfaces needed to grow into the full Roots mobile experience.
 
@@ -12,7 +12,7 @@ The first version is an app shell: it establishes the project structure, native 
 - `@microsoft/signalr` for Roots realtime hubs
 - React Native Firebase Messaging for Android FCM
 - `expo-secure-store` for access token persistence
-- `expo-updates` configured for Roots-hosted OTA manifests and assets
+- `expo-updates` configured for Nexus-hosted OTA manifests and assets
 
 ## Development
 
@@ -53,7 +53,7 @@ The app config lives in `app.json` under `expo.extra.roots`.
 Default API base URL:
 
 ```text
-https://roots.eresea.net
+https://nexus.eresea.net
 ```
 
 Known auth endpoints:
@@ -100,13 +100,13 @@ Current shell behavior:
 
 ## Self-Hosted Updates
 
-Pulse uses `expo-updates` with a Roots-hosted update URL:
+Pulse uses `expo-updates` with a Nexus-hosted update URL:
 
 ```text
-https://roots.eresea.net/api/mobile-updates/pulse
+https://nexus.eresea.net/api/mobile-updates/pulse
 ```
 
-Native changes still require a new Android build. JavaScript and asset-only changes can be exported and published to the Roots update infrastructure.
+Native changes still require a new Android build. JavaScript and asset-only changes can be exported and published to the Nexus update infrastructure. On app startup, Pulse checks for an available compatible update, fetches it, and reloads into it automatically.
 
 Export an Android update bundle:
 

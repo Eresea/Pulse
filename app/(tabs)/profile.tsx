@@ -1,7 +1,7 @@
 import { Mail, ShieldCheck, UserRound } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Image, ScrollView, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ActivityIndicator, Image, Text, View } from "react-native";
+import { Screen, ScreenScrollView } from "@/components/screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,8 +47,8 @@ export default function ProfileScreen() {
   }, [refreshProfile, session.user]);
 
   return (
-    <SafeAreaView className="flex-1 bg-background dark:bg-black" edges={["top"]}>
-      <ScrollView contentContainerClassName="gap-4 px-4 pb-8 pt-20">
+    <Screen>
+      <ScreenScrollView contentContainerClassName="pt-20">
         <View className="gap-2">
           <Text className="text-base text-muted-foreground dark:text-slate-400">Account details from Nexus.</Text>
         </View>
@@ -123,8 +123,8 @@ export default function ProfileScreen() {
             )}
           </CardContent>
         </Card>
-      </ScrollView>
-    </SafeAreaView>
+      </ScreenScrollView>
+    </Screen>
   );
 }
 
