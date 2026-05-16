@@ -6,7 +6,7 @@ import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, Settings, UserRound
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
-import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type DrawerDestination = {
@@ -217,8 +217,9 @@ export function DrawerShell({ children }: { children: ReactNode }) {
   }));
 
   const menuStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(slideX.value, [0, Math.max(screenWidth, 1) * 0.66], ["#12121b", "#000000"]),
     opacity: 0.92 + (slideX.value / Math.max(screenWidth, 1)) * 0.08,
-    transform: [{ translateX: (slideX.value / Math.max(screenWidth, 1) - 1) * 24 }],
+    transform: [{ translateX: (slideX.value / Math.max(screenWidth, 1) - 1) * 72 }],
   }));
 
   const contextValue = useMemo(() => ({ openMenu }), [openMenu]);
@@ -242,7 +243,7 @@ export function DrawerShell({ children }: { children: ReactNode }) {
       <DrawerShellContext.Provider value={contextValue}>
         <GestureDetector gesture={panGesture}>
           <View className="flex-1 overflow-hidden bg-background dark:bg-black">
-            <Animated.View className="absolute inset-0 bg-card dark:bg-black" renderToHardwareTextureAndroid shouldRasterizeIOS style={menuStyle}>
+            <Animated.View className="absolute inset-0" renderToHardwareTextureAndroid shouldRasterizeIOS style={menuStyle}>
               <SafeAreaView className="flex-1" edges={["top", "bottom"]}>
                 <View className="flex-1 px-4 pb-4 pt-2">
                   <View className="mb-5">
