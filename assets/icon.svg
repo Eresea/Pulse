@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" version="1.1">
+  <defs>
+    <filter id="electric-glow-subtle" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1" result="blur1" />
+      <feGaussianBlur stdDeviation="6" result="blur2" />
+
+      <feMerge>
+        <feMergeNode in="blur2" />
+        <feMergeNode in="blur1" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- AMOLED black background -->
+  <rect width="100%" height="100%" fill="#000000" />
+
+  <!--
+    Scaled to 80% around the center of the canvas (512,512)
+    translate = 512 * (1 - 0.8) = 102.4
+  -->
+  <g
+    stroke="#DCEBFF"
+    filter="url(#electric-glow-subtle)"
+    transform="translate(102.4 102.4) scale(0.8)"
+  >
+    <!-- Heartbeat Line -->
+    <path
+      d="M 180 540
+         C 230 540 235 475 270 475
+         C 310 475 320 595 360 595
+         C 395 595 428 440 445 370
+         L 535 730
+         L 685 435"
+      fill="none"
+      stroke-width="24"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Arrow Head -->
+    <path
+      d="M 685 435
+         L 590 415
+         L 750 325
+         L 750 515
+         Z"
+      fill="none"
+      stroke-width="24"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Inner Signal Wave -->
+    <path
+      d="M 686.08 279.60
+         A 78 78 0 1 1 813.92 370.40"
+      fill="none"
+      stroke-width="8"
+      stroke-linecap="round"
+    />
+
+    <!-- Outer Signal Wave -->
+    <path
+      d="M 651.66 255.15
+         A 120 120 0 1 1 848.34 394.85"
+      fill="none"
+      stroke-width="10"
+      stroke-linecap="round"
+      stroke-opacity="0.45"
+    />
+  </g>
+</svg>

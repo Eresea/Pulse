@@ -5,6 +5,7 @@
     "scheme": "pulse",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/icon-1024.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "runtimeVersion": {
@@ -20,6 +21,7 @@
     "android": {
       "package": "net.eresea.roots.pulse",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon-foreground.png",
         "backgroundColor": "#0f172a"
       },
       "permissions": ["POST_NOTIFICATIONS", "VIBRATE"]
