@@ -92,7 +92,7 @@ export class RootsApi {
   private async parseResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       const detail = await response.text();
-      throw new Error(detail || `Roots API request failed with ${response.status}`);
+      throw new Error(formatApiError(detail) || `Roots API request failed with ${response.status}`);
     }
 
     if (response.status === 204) {
@@ -104,3 +104,36 @@ export class RootsApi {
 }
 
 export const rootsApi = new RootsApi();
+
+function formatApiError(detail: string) {
+  if (!detail) {
+    return "";
+  }
+  try {
+    const payload = JSON.parse(detail) as { error?: string; message?: string };
+    return payload.message ?? formatErrorCode(payload.error) ?? detail;
+  } catch {
+    return detail;
+  }
+}
+
+function formatErrorCode(code?: string) {
+  switch (code) {
+    case "internal_error":
+      return "Nexus returned an internal error.";
+    case "invalid_request":
+      return "Nexus rejected the request.";
+    case "not_found":
+      return "Nexus could not find the requested resource.";
+    case "openrouter_not_configured":
+      return "Nexus AI is not configured.";
+    case "openrouter_upstream_error":
+      return "Nexus AI provider returned an error.";
+    case "openrouter_empty_response":
+      return "Nexus AI provider returned an empty response.";
+    case "unauthorized":
+      return "Your Nexus session is not authorized.";
+    default:
+      return code;
+  }
+}

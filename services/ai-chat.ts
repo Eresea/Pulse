@@ -35,6 +35,7 @@ type RawMessage = Partial<AiChatMessage> & {
 type RawModel = Partial<AiChatModel> & {
   modelId?: string;
   displayName?: string;
+  defaultModel?: boolean;
 };
 
 function mapThread(thread: RawThread): AiChatThread {
@@ -81,35 +82,53 @@ function normalizeModelList(result: unknown): AiChatModel[] {
         id: model.id ?? model.modelId ?? "",
         name: model.name ?? model.displayName ?? model.id ?? model.modelId ?? "AI model",
         provider: model.provider,
-        description: model.description
+        description: model.description,
+        defaultModel: model.defaultModel
       };
     })
     .filter((model) => model.id);
 }
 
-function parseStreamPayload(payload: string): AiChatStreamEvent | null {
+function parseStreamPayload(payload: string, eventType?: string): AiChatStreamEvent | null {
   if (!payload.trim() || payload === "[DONE]") {
     return payload === "[DONE]" ? { type: "done" } : null;
   }
 
   try {
-    const event = JSON.parse(payload) as Partial<AiChatStreamEvent> & {
+    const event = JSON.parse(payload) as Omit<Partial<AiChatStreamEvent>, "type"> & {
+      type?: string;
       delta?: string;
       text?: string;
       content?: string;
+      output_text?: string;
+      error?: { message?: string } | string;
       thread?: RawThread;
       message?: RawMessage;
     };
+    const type = event.type ?? eventType;
 
-    if (event.type) {
-      return event as AiChatStreamEvent;
-    }
     const choiceDelta = (event as { choices?: { delta?: { content?: string }; text?: string }[] }).choices?.[0];
     if (choiceDelta?.delta?.content || choiceDelta?.text) {
       return { type: "delta", delta: choiceDelta.delta?.content ?? choiceDelta.text ?? "" };
     }
-    if (event.delta || event.text || event.content) {
-      return { type: "delta", delta: event.delta ?? event.text ?? event.content ?? "" };
+    if (type === "thread" && event.thread) {
+      return { type: "thread", thread: mapThread(event.thread) };
+    }
+    if (type === "message" && event.message) {
+      return { type: "message", message: mapMessage(event.message) };
+    }
+    if (type === "delta" || type === "response.output_text.delta" || type === "response.text.delta") {
+      return { type: "delta", delta: event.delta ?? event.text ?? event.content ?? event.output_text ?? "" };
+    }
+    if (type === "done" || type === "response.completed" || type === "response.done") {
+      return { type: "done" };
+    }
+    if (type === "error" || type === "response.failed") {
+      const message = typeof event.error === "string" ? event.error : event.error?.message ?? event.content ?? event.text;
+      return { type: "error", message: formatStreamErrorCode(message) ?? "Nexus AI request failed." };
+    }
+    if (event.delta || event.text || event.content || event.output_text) {
+      return { type: "delta", delta: event.delta ?? event.text ?? event.content ?? event.output_text ?? "" };
     }
     if (event.thread) {
       return { type: "thread", thread: mapThread(event.thread) };
@@ -122,6 +141,25 @@ function parseStreamPayload(payload: string): AiChatStreamEvent | null {
   }
 
   return null;
+}
+
+function formatStreamErrorCode(code?: string) {
+  switch (code) {
+    case "invalid_request":
+      return "Nexus rejected the AI request.";
+    case "not_found":
+      return "The selected Nexus AI model was not found.";
+    case "openrouter_not_configured":
+      return "Nexus AI is not configured.";
+    case "openrouter_upstream_error":
+      return "Nexus AI provider returned an error.";
+    case "openrouter_empty_response":
+      return "Nexus AI provider returned an empty response.";
+    case "internal_error":
+      return "Nexus returned an internal error.";
+    default:
+      return code;
+  }
 }
 
 function parseStreamChunk(chunk: string, remainder: string) {
@@ -157,6 +195,11 @@ export const aiChatService = {
   },
 
   async sendMessageStream({ messages, modelId, onEvent }: SendMessageOptions): Promise<void> {
+    const resolvedModelId = modelId ?? (await aiChatService.listModels())[0]?.id;
+    if (!resolvedModelId) {
+      throw new Error("No Nexus AI model is available.");
+    }
+
     const headers = new Headers({
       Accept: "text/event-stream, application/x-ndjson, application/json",
       "Content-Type": "application/json"
@@ -170,7 +213,7 @@ export const aiChatService = {
       method: "POST",
       headers,
       body: JSON.stringify({
-        model: modelId,
+        modelId: resolvedModelId,
         messages: messages
           .filter((message) => message.role !== "system" || message.content.trim())
           .map((message) => ({ role: message.role, content: message.content }))
@@ -189,6 +232,7 @@ export const aiChatService = {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let remainder = "";
+    let pendingEventType: string | undefined;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -200,8 +244,17 @@ export const aiChatService = {
       remainder = parsed.remainder;
 
       parsed.lines.forEach((line) => {
-        const normalized = line.startsWith("data:") ? line.slice(5).trimStart() : line.trim();
-        const event = parseStreamPayload(normalized);
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(":")) {
+          return;
+        }
+        if (trimmed.startsWith("event:")) {
+          pendingEventType = trimmed.slice(6).trim();
+          return;
+        }
+        const normalized = trimmed.startsWith("data:") ? trimmed.slice(5).trimStart() : trimmed;
+        const event = parseStreamPayload(normalized, pendingEventType);
+        pendingEventType = undefined;
         if (event) {
           onEvent(event);
         }
@@ -210,7 +263,7 @@ export const aiChatService = {
 
     const finalText = `${remainder}${decoder.decode()}`.trim();
     if (finalText) {
-      const event = parseStreamPayload(finalText.startsWith("data:") ? finalText.slice(5).trimStart() : finalText);
+      const event = parseStreamPayload(finalText.startsWith("data:") ? finalText.slice(5).trimStart() : finalText, pendingEventType);
       if (event) {
         onEvent(event);
       }

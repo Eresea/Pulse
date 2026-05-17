@@ -5,7 +5,7 @@ import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
 import { realtimeService } from "@/services/realtime";
 import { updateService } from "@/services/updates";
-import type { AiChatMessage, AiChatThread, ServiceStatus, UserInfo } from "@/services/types";
+import type { AiChatMessage, AiChatModel, AiChatThread, ServiceStatus, UserInfo } from "@/services/types";
 
 type AppState = {
   session: {
@@ -27,8 +27,11 @@ type AppState = {
     status: string;
   };
   aiChat: {
+    models: AiChatModel[];
+    selectedModelId?: string;
     threads: AiChatThread[];
     messagesByThread: Record<string, AiChatMessage[]>;
+    isLoadingModels: boolean;
     isLoadingThreads: boolean;
     loadingThreadId?: string;
     streamingThreadId?: string;
@@ -39,12 +42,14 @@ type AppState = {
     checkForUpdates: () => void;
     completeLogin: (accessToken: string, refreshToken?: string) => Promise<void>;
     createAiThread: () => Promise<AiChatThread>;
+    loadAiModels: () => Promise<AiChatModel[]>;
     loadAiMessages: (threadId: string) => Promise<AiChatMessage[]>;
     loadAiThreads: () => Promise<AiChatThread[]>;
     loginEmail: (email: string, password: string) => Promise<void>;
     prefetchUser: () => Promise<UserInfo | undefined>;
     refreshUser: () => Promise<UserInfo>;
     registerEmail: (email: string, password: string, displayName: string) => Promise<void>;
+    selectAiModel: (modelId: string) => void;
     sendAiMessage: (threadId: string, content: string) => Promise<void>;
     signOut: () => Promise<void>;
   };
@@ -60,13 +65,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [updateStatus, setUpdateStatus] = useState("idle");
   const [user, setUser] = useState<UserInfo | undefined>();
   const [isRestoringSession, setIsRestoringSession] = useState(true);
+  const [aiModels, setAiModels] = useState<AiChatModel[]>([]);
+  const [selectedAiModelId, setSelectedAiModelId] = useState<string | undefined>();
   const [aiThreads, setAiThreads] = useState<AiChatThread[]>([]);
   const [aiMessagesByThread, setAiMessagesByThread] = useState<Record<string, AiChatMessage[]>>({});
+  const [isLoadingAiModels, setIsLoadingAiModels] = useState(false);
   const [isLoadingAiThreads, setIsLoadingAiThreads] = useState(false);
   const [loadingAiThreadId, setLoadingAiThreadId] = useState<string | undefined>();
   const [streamingAiThreadId, setStreamingAiThreadId] = useState<string | undefined>();
   const [aiChatError, setAiChatError] = useState<string | undefined>();
   const userRefreshPromise = useRef<Promise<UserInfo> | null>(null);
+  const aiModelsPromise = useRef<Promise<AiChatModel[]> | null>(null);
   const aiThreadsPromise = useRef<Promise<AiChatThread[]> | null>(null);
   const autoUpdateStarted = useRef(false);
 
@@ -130,8 +139,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         status: updateStatus
       },
       aiChat: {
+        models: aiModels,
+        selectedModelId: selectedAiModelId,
         threads: aiThreads,
         messagesByThread: aiMessagesByThread,
+        isLoadingModels: isLoadingAiModels,
         isLoadingThreads: isLoadingAiThreads,
         loadingThreadId: loadingAiThreadId,
         streamingThreadId: streamingAiThreadId,
@@ -170,6 +182,31 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           setAiThreads((current) => mergeThread(current, thread));
           setAiMessagesByThread((current) => ({ ...current, [thread.id]: current[thread.id] ?? [] }));
           return thread;
+        },
+        loadAiModels: async () => {
+          if (aiModels.length) {
+            return aiModels;
+          }
+          if (!aiModelsPromise.current) {
+            setIsLoadingAiModels(true);
+            setAiChatError(undefined);
+            aiModelsPromise.current = aiChatService
+              .listModels()
+              .then((models) => {
+                setAiModels(models);
+                setSelectedAiModelId((current) => current ?? models.find((model) => model.defaultModel)?.id ?? models[0]?.id);
+                return models;
+              })
+              .catch((err) => {
+                setAiChatError(err instanceof Error ? err.message : "Could not load AI models.");
+                throw err;
+              })
+              .finally(() => {
+                aiModelsPromise.current = null;
+                setIsLoadingAiModels(false);
+              });
+          }
+          return aiModelsPromise.current;
         },
         loadAiMessages: async (threadId: string) => {
           setLoadingAiThreadId(threadId);
@@ -245,6 +282,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         registerEmail: async (email: string, password: string, displayName: string) => {
           await authService.registerEmail({ email, password, displayName });
         },
+        selectAiModel: (modelId: string) => {
+          setSelectedAiModelId(modelId);
+        },
         sendAiMessage: async (threadId: string, content: string) => {
           const now = new Date().toISOString();
           const userMessage: AiChatMessage = {
@@ -281,7 +321,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           );
 
           try {
+            let receivedAssistantContent = false;
+            const modelId = selectedAiModelId ?? aiModels.find((model) => model.defaultModel)?.id ?? aiModels[0]?.id;
             await aiChatService.sendMessageStream({
+              modelId,
               messages: [...priorMessages.filter((message) => message.status !== "error"), userMessage],
               onEvent: (event) => {
                 if (event.type === "thread") {
@@ -289,10 +332,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                   return;
                 }
                 if (event.type === "message") {
+                  receivedAssistantContent = receivedAssistantContent || Boolean(event.message.content.trim());
                   setAiMessagesByThread((current) => replaceOrAppendMessage(current, threadId, event.message, assistantMessage.id));
                   return;
                 }
                 if (event.type === "delta") {
+                  receivedAssistantContent = receivedAssistantContent || Boolean(event.delta);
                   setAiMessagesByThread((current) => appendAssistantDelta(current, threadId, assistantMessage.id, event.delta));
                   return;
                 }
@@ -301,6 +346,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                 }
               }
             });
+            if (!receivedAssistantContent) {
+              throw new Error("Nexus AI returned an empty response.");
+            }
 
             setAiMessagesByThread((current) => markThreadMessagesSent(current, threadId));
             setAiThreads((current) => touchThread(current, threadId, { status: "idle", lastActivityAt: new Date().toISOString() }));
@@ -316,12 +364,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         signOut: async () => {
           await authService.signOut();
           setUser(undefined);
+          setAiModels([]);
+          setSelectedAiModelId(undefined);
           setAiThreads([]);
           setAiMessagesByThread({});
         }
       }
     }),
-    [aiChatError, aiMessagesByThread, aiThreads, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeStatus, streamingAiThreadId, updateStatus, user]
+    [aiChatError, aiMessagesByThread, aiModels, aiThreads, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

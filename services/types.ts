@@ -97,6 +97,7 @@ export type AiChatModel = {
   name: string;
   provider?: string;
   description?: string;
+  defaultModel?: boolean;
 };
 
 export type AiChatMessage = {
