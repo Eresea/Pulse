@@ -70,6 +70,18 @@ export const authService = {
     return mapNexusUser(user);
   },
 
+  async restoreSession(): Promise<UserInfo | undefined> {
+    try {
+      return await this.me();
+    } catch {
+      const accessToken = await this.refresh();
+      if (!accessToken) {
+        return undefined;
+      }
+      return this.me();
+    }
+  },
+
   async refresh(): Promise<string | null> {
     const refreshToken = await tokenStore.getRefreshToken();
     if (!refreshToken) {

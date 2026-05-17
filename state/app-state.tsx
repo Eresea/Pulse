@@ -9,6 +9,7 @@ import type { ServiceStatus, UserInfo } from "@/services/types";
 type AppState = {
   session: {
     isAuthenticated: boolean;
+    isRestoring: boolean;
     user?: UserInfo;
   };
   realtime: {
@@ -45,6 +46,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [pollingStatus, setPollingStatus] = useState<"idle" | "running" | "error">("idle");
   const [updateStatus, setUpdateStatus] = useState("idle");
   const [user, setUser] = useState<UserInfo | undefined>();
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
   const userRefreshPromise = useRef<Promise<UserInfo> | null>(null);
   const autoUpdateStarted = useRef(false);
 
@@ -61,10 +63,37 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       .catch(() => setUpdateStatus("error"));
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void authService
+      .restoreSession()
+      .then((nextUser) => {
+        if (!cancelled) {
+          setUser(nextUser);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUser(undefined);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsRestoringSession(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const value = useMemo<AppState>(
     () => ({
       session: {
         isAuthenticated: Boolean(user),
+        isRestoring: isRestoringSession,
         user
       },
       realtime: {
@@ -149,7 +178,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         }
       }
     }),
-    [pollingStatus, pushPermission, pushToken, realtimeStatus, updateStatus, user]
+    [isRestoringSession, pollingStatus, pushPermission, pushToken, realtimeStatus, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

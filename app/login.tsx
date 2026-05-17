@@ -3,7 +3,7 @@ import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { Chrome, LockKeyhole, Mail, RadioTower, UserRound } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Easing, KeyboardAvoidingView, Platform, Text, Pressable, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, KeyboardAvoidingView, Platform, Text, Pressable, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -122,6 +122,14 @@ export default function LoginScreen() {
   const title = mode === "login" ? "Welcome back" : "Create subscription";
   const actionLabel = mode === "login" ? "Sign in" : "Subscribe";
   const switchLabel = mode === "login" ? "Subscribe instead" : "Sign in instead";
+
+  if (session.isRestoring) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background dark:bg-black">
+        <ActivityIndicator />
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-background dark:bg-black">

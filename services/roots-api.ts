@@ -9,6 +9,11 @@ export class RootsApi {
   constructor(private readonly baseUrl = appConfig.apiBaseUrl) {}
 
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    const response = await this.fetch(path, options);
+    return this.parseResponse<T>(response);
+  }
+
+  private async fetch(path: string, options: RequestOptions) {
     const headers = new Headers(options.headers);
     headers.set("Accept", "application/json");
 
@@ -23,7 +28,7 @@ export class RootsApi {
       }
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    let response = await fetch(`${this.baseUrl}${path}`, {
       ...options,
       headers
     });
@@ -33,6 +38,58 @@ export class RootsApi {
       await tokenStore.setAccessToken(refreshedToken);
     }
 
+    if (response.status === 401 && options.authenticated !== false) {
+      const nextToken = await this.refreshAccessToken();
+      if (nextToken) {
+        headers.set("Authorization", nextToken.startsWith("Bearer ") ? nextToken : `Bearer ${nextToken}`);
+        response = await fetch(`${this.baseUrl}${path}`, {
+          ...options,
+          headers
+        });
+
+        const retryRefreshedToken = response.headers.get("Authorization");
+        if (retryRefreshedToken) {
+          await tokenStore.setAccessToken(retryRefreshedToken);
+        }
+      }
+    }
+
+    return response;
+  }
+
+  private async refreshAccessToken() {
+    const refreshToken = await tokenStore.getRefreshToken();
+    if (!refreshToken) {
+      return null;
+    }
+
+    const response = await fetch(`${this.baseUrl}${appConfig.auth.refresh}`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ refreshToken })
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const result = (await response.json()) as { accessToken?: string; refreshToken?: string; tokenType?: string };
+    if (!result.accessToken) {
+      return null;
+    }
+
+    const accessToken = result.tokenType === "Bearer" ? `Bearer ${result.accessToken}` : result.accessToken;
+    await tokenStore.setAccessToken(accessToken);
+    if (result.refreshToken) {
+      await tokenStore.setRefreshToken(result.refreshToken);
+    }
+    return accessToken;
+  }
+
+  private async parseResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       const detail = await response.text();
       throw new Error(detail || `Roots API request failed with ${response.status}`);
