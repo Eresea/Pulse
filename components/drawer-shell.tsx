@@ -2,6 +2,7 @@ import { cn } from "@/lib/cn";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 import { router, usePathname } from "expo-router";
+import type { Href } from "expo-router";
 import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, Settings, UserRound } from "lucide-react-native";
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
@@ -11,12 +12,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 type DrawerDestination = {
   label: string;
-  href: "/(tabs)" | "/(tabs)/inbox" | "/(tabs)/profile" | "/(tabs)/settings";
+  href: "/(tabs)" | "/(tabs)/inbox" | "/(tabs)/chat" | "/(tabs)/profile" | "/(tabs)/settings";
   icon: React.ComponentType<{ color: string; size: number }>;
   match: (pathname: string) => boolean;
 };
 
-type PrimaryDrawerHref = "/(tabs)" | "/(tabs)/inbox";
+type PrimaryDrawerHref = "/(tabs)" | "/(tabs)/inbox" | "/(tabs)/chat";
 
 type DrawerShellContextValue = {
   openMenu: () => void;
@@ -37,6 +38,12 @@ const mainDestinations: DrawerDestination[] = [
     icon: Bell,
     match: (pathname) => pathname.includes("/inbox"),
   },
+  {
+    label: "AI Chat",
+    href: "/(tabs)/chat",
+    icon: Bot,
+    match: (pathname) => pathname.includes("/chat"),
+  },
 ];
 
 const profileDestination: DrawerDestination = {
@@ -51,6 +58,10 @@ const drawerRoutes = [...mainDestinations.map((item) => item.href), profileDesti
 function getPrimaryHref(pathname: string): PrimaryDrawerHref | undefined {
   if (pathname.includes("/inbox")) {
     return "/(tabs)/inbox";
+  }
+
+  if (pathname.includes("/chat")) {
+    return "/(tabs)/chat";
   }
 
   if (pathname === "/" || pathname === "/(tabs)") {
@@ -86,7 +97,7 @@ export function PageHeader({ title }: { title: string }) {
 
 export function DrawerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { session, actions } = useAppState();
+  const { session, aiChat, actions } = useAppState();
   const { width: screenWidth } = useWindowDimensions();
   const { colors } = useTheme();
   const profileLabel = session.user?.name || session.user?.email || "Profile";
@@ -113,7 +124,7 @@ export function DrawerShell({ children }: { children: ReactNode }) {
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace(lastPrimaryHref.current);
+        router.replace(lastPrimaryHref.current as Href);
       }
     }
   }, [pathname]);
@@ -141,9 +152,10 @@ export function DrawerShell({ children }: { children: ReactNode }) {
 
     requestAnimationFrame(() => {
       drawerRoutes.forEach((href) => {
-        router.prefetch(href);
+        router.prefetch(href as Href);
       });
       void actions.prefetchUser();
+      void actions.loadAiThreads().catch(() => undefined);
       restorePrimaryRoute();
     });
   }, [actions, restorePrimaryRoute, snapTo]);
@@ -231,7 +243,7 @@ export function DrawerShell({ children }: { children: ReactNode }) {
       lastPrimaryHref.current = primaryHref;
     }
 
-    router.push(href);
+    router.push(href as Href);
 
     if (open) {
       snapTo(false);
@@ -259,8 +271,24 @@ export function DrawerShell({ children }: { children: ReactNode }) {
 
                   <View className="mt-6 gap-3">
                     <SectionTitle>Recent AI Threads</SectionTitle>
-                    <ReservedRow icon={Bot} label="No active threads" />
-                    <ReservedRow icon={Bot} label="Reserved for Roots AI" muted />
+                    {aiChat.threads.length ? (
+                      aiChat.threads.slice(0, 3).map((thread) => (
+                        <ReservedRow
+                          key={thread.id}
+                          icon={Bot}
+                          label={thread.title}
+                          muted={thread.status !== "streaming"}
+                          onPress={() => {
+                            router.push({ pathname: "/(tabs)/chat/[threadId]", params: { threadId: thread.id } } as unknown as Href);
+                            if (open) {
+                              snapTo(false);
+                            }
+                          }}
+                        />
+                      ))
+                    ) : (
+                      <ReservedRow icon={Bot} label={aiChat.isLoadingThreads ? "Loading threads" : "No active threads"} />
+                    )}
                   </View>
 
                   <View className="mt-6 gap-3">
@@ -337,13 +365,16 @@ function SectionTitle({ children }: { children: ReactNode }) {
   return <Text className="px-1 text-xs font-semibold uppercase text-muted-foreground dark:text-slate-400">{children}</Text>;
 }
 
-function ReservedRow({ icon: Icon, label, muted = false }: { icon: React.ComponentType<{ color: string; size: number }>; label: string; muted?: boolean }) {
+function ReservedRow({ icon: Icon, label, muted = false, onPress }: { icon: React.ComponentType<{ color: string; size: number }>; label: string; muted?: boolean; onPress?: () => void }) {
   const { colors } = useTheme();
+  const Container = onPress ? Pressable : View;
 
   return (
-    <View className={cn("flex-row items-center gap-3 rounded-md px-3 py-2", muted ? "opacity-60" : undefined)}>
+    <Container accessibilityRole={onPress ? "button" : undefined} className={cn("flex-row items-center gap-3 rounded-md px-3 py-2", muted ? "opacity-60" : undefined)} onPress={onPress}>
       <Icon color={colors.muted} size={17} />
-      <Text className="text-sm text-muted-foreground dark:text-slate-400">{label}</Text>
-    </View>
+      <Text className="min-w-0 flex-1 text-sm text-muted-foreground dark:text-slate-400" numberOfLines={1}>
+        {label}
+      </Text>
+    </Container>
   );
 }

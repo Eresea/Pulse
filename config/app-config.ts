@@ -27,5 +27,9 @@ export const appConfig = {
     logout: "/api/v1/auth/logout",
     me: "/api/v1/me",
     device: (userId: string) => `/api/v1/auth/user/${userId}/device`
+  },
+  ai: {
+    models: "/api/v1/ai/models",
+    chatStream: "/api/v1/ai/chat/stream"
   }
 } as const;

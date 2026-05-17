@@ -80,3 +80,37 @@ export type RootsEvent = {
   receivedAt: string;
   payload: unknown;
 };
+
+export type AiChatRole = "user" | "assistant" | "system";
+
+export type AiChatThread = {
+  id: string;
+  title: string;
+  preview?: string;
+  lastActivityAt?: string;
+  unreadCount?: number;
+  status?: "idle" | "streaming" | "error";
+};
+
+export type AiChatModel = {
+  id: string;
+  name: string;
+  provider?: string;
+  description?: string;
+};
+
+export type AiChatMessage = {
+  id: string;
+  threadId: string;
+  role: AiChatRole;
+  content: string;
+  createdAt: string;
+  status?: "sending" | "streaming" | "sent" | "error";
+};
+
+export type AiChatStreamEvent =
+  | { type: "thread"; thread: AiChatThread }
+  | { type: "message"; message: AiChatMessage }
+  | { type: "delta"; delta: string }
+  | { type: "done" }
+  | { type: "error"; message: string };

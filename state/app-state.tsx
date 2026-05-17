@@ -1,10 +1,11 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { aiChatService } from "@/services/ai-chat";
 import { authService } from "@/services/auth";
 import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
 import { realtimeService } from "@/services/realtime";
 import { updateService } from "@/services/updates";
-import type { ServiceStatus, UserInfo } from "@/services/types";
+import type { AiChatMessage, AiChatThread, ServiceStatus, UserInfo } from "@/services/types";
 
 type AppState = {
   session: {
@@ -25,14 +26,26 @@ type AppState = {
   updates: {
     status: string;
   };
+  aiChat: {
+    threads: AiChatThread[];
+    messagesByThread: Record<string, AiChatMessage[]>;
+    isLoadingThreads: boolean;
+    loadingThreadId?: string;
+    streamingThreadId?: string;
+    error?: string;
+  };
   actions: {
     bootstrap: () => void;
     checkForUpdates: () => void;
     completeLogin: (accessToken: string, refreshToken?: string) => Promise<void>;
+    createAiThread: () => Promise<AiChatThread>;
+    loadAiMessages: (threadId: string) => Promise<AiChatMessage[]>;
+    loadAiThreads: () => Promise<AiChatThread[]>;
     loginEmail: (email: string, password: string) => Promise<void>;
     prefetchUser: () => Promise<UserInfo | undefined>;
     refreshUser: () => Promise<UserInfo>;
     registerEmail: (email: string, password: string, displayName: string) => Promise<void>;
+    sendAiMessage: (threadId: string, content: string) => Promise<void>;
     signOut: () => Promise<void>;
   };
 };
@@ -47,7 +60,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [updateStatus, setUpdateStatus] = useState("idle");
   const [user, setUser] = useState<UserInfo | undefined>();
   const [isRestoringSession, setIsRestoringSession] = useState(true);
+  const [aiThreads, setAiThreads] = useState<AiChatThread[]>([]);
+  const [aiMessagesByThread, setAiMessagesByThread] = useState<Record<string, AiChatMessage[]>>({});
+  const [isLoadingAiThreads, setIsLoadingAiThreads] = useState(false);
+  const [loadingAiThreadId, setLoadingAiThreadId] = useState<string | undefined>();
+  const [streamingAiThreadId, setStreamingAiThreadId] = useState<string | undefined>();
+  const [aiChatError, setAiChatError] = useState<string | undefined>();
   const userRefreshPromise = useRef<Promise<UserInfo> | null>(null);
+  const aiThreadsPromise = useRef<Promise<AiChatThread[]> | null>(null);
   const autoUpdateStarted = useRef(false);
 
   useEffect(() => {
@@ -109,6 +129,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updates: {
         status: updateStatus
       },
+      aiChat: {
+        threads: aiThreads,
+        messagesByThread: aiMessagesByThread,
+        isLoadingThreads: isLoadingAiThreads,
+        loadingThreadId: loadingAiThreadId,
+        streamingThreadId: streamingAiThreadId,
+        error: aiChatError
+      },
       actions: {
         bootstrap: () => {
           realtimeService.subscribeStatus(setRealtimeStatus);
@@ -135,6 +163,51 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         completeLogin: async (accessToken: string, refreshToken?: string) => {
           const nextUser = await authService.completeLogin({ accessToken, refreshToken, tokenType: "Bearer" });
           setUser(nextUser);
+        },
+        createAiThread: async () => {
+          setAiChatError(undefined);
+          const thread = await aiChatService.createThread();
+          setAiThreads((current) => mergeThread(current, thread));
+          setAiMessagesByThread((current) => ({ ...current, [thread.id]: current[thread.id] ?? [] }));
+          return thread;
+        },
+        loadAiMessages: async (threadId: string) => {
+          setLoadingAiThreadId(threadId);
+          setAiChatError(undefined);
+          try {
+            const messages = await aiChatService.listMessages(threadId);
+            setAiMessagesByThread((current) => ({ ...current, [threadId]: messages }));
+            return messages;
+          } catch (err) {
+            setAiChatError(err instanceof Error ? err.message : "Could not load chat messages.");
+            throw err;
+          } finally {
+            setLoadingAiThreadId(undefined);
+          }
+        },
+        loadAiThreads: async () => {
+          if (aiThreads.length) {
+            return aiThreads;
+          }
+          if (!aiThreadsPromise.current) {
+            setIsLoadingAiThreads(true);
+            setAiChatError(undefined);
+            aiThreadsPromise.current = aiChatService
+              .listThreads()
+              .then((threads) => {
+                setAiThreads(threads);
+                return threads;
+              })
+              .catch((err) => {
+                setAiChatError(err instanceof Error ? err.message : "Could not load AI threads.");
+                throw err;
+              })
+              .finally(() => {
+                aiThreadsPromise.current = null;
+                setIsLoadingAiThreads(false);
+              });
+          }
+          return aiThreadsPromise.current;
         },
         loginEmail: async (email: string, password: string) => {
           const nextUser = await authService.loginEmail({ email, password });
@@ -172,16 +245,151 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         registerEmail: async (email: string, password: string, displayName: string) => {
           await authService.registerEmail({ email, password, displayName });
         },
+        sendAiMessage: async (threadId: string, content: string) => {
+          const now = new Date().toISOString();
+          const userMessage: AiChatMessage = {
+            id: `local-user-${Date.now()}`,
+            threadId,
+            role: "user",
+            content,
+            createdAt: now,
+            status: "sending"
+          };
+          const assistantMessage: AiChatMessage = {
+            id: `local-assistant-${Date.now()}`,
+            threadId,
+            role: "assistant",
+            content: "",
+            createdAt: now,
+            status: "streaming"
+          };
+
+          setAiChatError(undefined);
+          setStreamingAiThreadId(threadId);
+          setAiMessagesByThread((current) => ({
+            ...current,
+            [threadId]: [...(current[threadId] ?? []), userMessage, assistantMessage]
+          }));
+          const priorMessages = aiMessagesByThread[threadId] ?? [];
+          setAiThreads((current) =>
+            touchThread(current, threadId, {
+              title: current.find((thread) => thread.id === threadId)?.title === "New chat" ? titleFromPrompt(content) : undefined,
+              preview: content,
+              lastActivityAt: now,
+              status: "streaming"
+            })
+          );
+
+          try {
+            await aiChatService.sendMessageStream({
+              messages: [...priorMessages.filter((message) => message.status !== "error"), userMessage],
+              onEvent: (event) => {
+                if (event.type === "thread") {
+                  setAiThreads((current) => mergeThread(current, event.thread));
+                  return;
+                }
+                if (event.type === "message") {
+                  setAiMessagesByThread((current) => replaceOrAppendMessage(current, threadId, event.message, assistantMessage.id));
+                  return;
+                }
+                if (event.type === "delta") {
+                  setAiMessagesByThread((current) => appendAssistantDelta(current, threadId, assistantMessage.id, event.delta));
+                  return;
+                }
+                if (event.type === "error") {
+                  throw new Error(event.message);
+                }
+              }
+            });
+
+            setAiMessagesByThread((current) => markThreadMessagesSent(current, threadId));
+            setAiThreads((current) => touchThread(current, threadId, { status: "idle", lastActivityAt: new Date().toISOString() }));
+          } catch (err) {
+            setAiChatError(err instanceof Error ? err.message : "Could not send message.");
+            setAiMessagesByThread((current) => markThreadMessagesError(current, threadId));
+            setAiThreads((current) => touchThread(current, threadId, { status: "error" }));
+            throw err;
+          } finally {
+            setStreamingAiThreadId(undefined);
+          }
+        },
         signOut: async () => {
           await authService.signOut();
           setUser(undefined);
+          setAiThreads([]);
+          setAiMessagesByThread({});
         }
       }
     }),
-    [isRestoringSession, pollingStatus, pushPermission, pushToken, realtimeStatus, updateStatus, user]
+    [aiChatError, aiMessagesByThread, aiThreads, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeStatus, streamingAiThreadId, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
+}
+
+function mergeThread(current: AiChatThread[], thread: AiChatThread) {
+  return [thread, ...current.filter((item) => item.id !== thread.id)].sort(sortThreads);
+}
+
+function touchThread(current: AiChatThread[], threadId: string, patch: Partial<AiChatThread>) {
+  return current
+    .map((thread) => (thread.id === threadId ? compactThreadPatch(thread, patch) : thread))
+    .sort(sortThreads);
+}
+
+function compactThreadPatch(thread: AiChatThread, patch: Partial<AiChatThread>) {
+  return {
+    ...thread,
+    ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined))
+  } as AiChatThread;
+}
+
+function sortThreads(a: AiChatThread, b: AiChatThread) {
+  return new Date(b.lastActivityAt ?? 0).getTime() - new Date(a.lastActivityAt ?? 0).getTime();
+}
+
+function replaceOrAppendMessage(current: Record<string, AiChatMessage[]>, threadId: string, message: AiChatMessage, fallbackId: string): Record<string, AiChatMessage[]> {
+  const messages = current[threadId] ?? [];
+  const existingIndex = messages.findIndex((item) => item.id === message.id || item.id === fallbackId);
+  const nextMessage: AiChatMessage = { ...message, threadId, status: message.status ?? "sent" };
+
+  if (existingIndex < 0) {
+    return { ...current, [threadId]: [...messages, nextMessage] };
+  }
+
+  return {
+    ...current,
+    [threadId]: messages.map((item, index) => (index === existingIndex ? nextMessage : item))
+  };
+}
+
+function appendAssistantDelta(current: Record<string, AiChatMessage[]>, threadId: string, messageId: string, delta: string): Record<string, AiChatMessage[]> {
+  return {
+    ...current,
+    [threadId]: (current[threadId] ?? []).map((message) => (message.id === messageId ? { ...message, content: `${message.content}${delta}` } : message))
+  };
+}
+
+function markThreadMessagesSent(current: Record<string, AiChatMessage[]>, threadId: string): Record<string, AiChatMessage[]> {
+  return {
+    ...current,
+    [threadId]: (current[threadId] ?? []).map((message): AiChatMessage => (message.status === "sending" || message.status === "streaming" ? { ...message, status: "sent" } : message))
+  };
+}
+
+function markThreadMessagesError(current: Record<string, AiChatMessage[]>, threadId: string): Record<string, AiChatMessage[]> {
+  return {
+    ...current,
+    [threadId]: (current[threadId] ?? []).map((message): AiChatMessage => (message.status === "sending" || message.status === "streaming" ? { ...message, status: "error" } : message))
+  };
+}
+
+function titleFromPrompt(content: string) {
+  const trimmed = content.replace(/\s+/g, " ").trim();
+  if (!trimmed) {
+    return "New chat";
+  }
+  return trimmed.length > 42 ? `${trimmed.slice(0, 39)}...` : trimmed;
 }
 
 export function useAppState() {
