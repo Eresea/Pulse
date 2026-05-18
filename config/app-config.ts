@@ -13,10 +13,8 @@ export const appConfig = {
   updateUrl: Constants.expoConfig?.updates?.url ?? "https://nexus.eresea.net/api/mobile-updates/pulse",
   updateChannel: roots.updateChannel ?? "production",
   pollingIntervalMs: roots.pollingIntervalMs ?? 30000,
-  hubs: {
-    chat: "/api/chatHub",
-    bellum: "/api/bellumHub",
-    battle: "/api/battleHub"
+  realtime: {
+    userSocket: "/ws/v1/user"
   },
   auth: {
     clientId: "pulse",

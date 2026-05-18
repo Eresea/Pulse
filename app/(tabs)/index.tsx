@@ -30,7 +30,7 @@ export default function HomeScreen() {
           </CardHeader>
           <CardContent className="gap-3">
             <StatusRow icon={ShieldCheck} label="Auth" value={session.isAuthenticated ? "Signed in" : "Guest shell"} iconColor={colors.icon} />
-            <StatusRow icon={Radio} label="SignalR" value={realtime.status} iconColor={colors.icon} />
+            <StatusRow icon={Radio} label="WebSocket" value={realtime.status} iconColor={colors.icon} />
             <StatusRow icon={Smartphone} label="FCM" value={push.permissionStatus} iconColor={colors.icon} />
           </CardContent>
         </Card>
@@ -41,7 +41,7 @@ export default function HomeScreen() {
           </CardHeader>
           <CardContent className="gap-3">
             <View className="flex-row flex-wrap gap-2">
-              <Badge>SignalR first</Badge>
+              <Badge>WebSocket first</Badge>
               <Badge variant="secondary">FCM wakeups</Badge>
               <Badge variant="outline">Polling fallback</Badge>
             </View>

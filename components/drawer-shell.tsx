@@ -294,7 +294,7 @@ export function DrawerShell({ children }: { children: ReactNode }) {
                   <View className="mt-6 gap-3">
                     <SectionTitle>Recent Events</SectionTitle>
                     <ReservedRow icon={CalendarClock} label="No recent events" />
-                    <ReservedRow icon={Bell} label="SignalR and FCM events" muted />
+                    <ReservedRow icon={Bell} label="WebSocket and FCM events" muted />
                   </View>
 
                   <View className="mt-auto pt-4">

@@ -68,7 +68,8 @@ export default function SettingsScreen() {
           </CardHeader>
           <CardContent className="gap-2">
             <SettingRow label="Auth" value={session.isAuthenticated ? "authenticated" : "guest"} />
-            <SettingRow label="SignalR" value={realtime.status} />
+            <SettingRow label="WebSocket" value={realtime.status} />
+            <SettingRow label="WebSocket detail" value={realtime.detail ?? "none"} />
             <SettingRow label="FCM token" value={push.token ? "available" : "missing"} />
             <SettingRow label="FCM permission" value={push.permissionStatus} />
             <SettingRow label="Polling" value={polling.status} />

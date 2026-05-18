@@ -75,7 +75,7 @@ export type DeviceInfo = {
 
 export type RootsEvent = {
   id: string;
-  source: "signalr" | "fcm" | "polling";
+  source: "websocket" | "fcm" | "polling";
   type: string;
   receivedAt: string;
   payload: unknown;

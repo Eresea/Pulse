@@ -7,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useTheme } from "@/theme/theme";
 
 const placeholderEvents = [
-  { id: "chat", title: "Chat messages", source: "chatHub", state: "ready" },
-  { id: "bellum", title: "Bellum session updates", source: "bellumHub", state: "stub" },
+  { id: "chat", title: "Chat messages", source: "/ws/v1/user", state: "ready" },
+  { id: "bellum", title: "Bellum session updates", source: "/ws/v1/user", state: "stub" },
   { id: "push", title: "Background notifications", source: "FCM", state: "pending config" }
 ];
 

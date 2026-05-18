@@ -17,6 +17,7 @@ type AppState = {
   };
   realtime: {
     status: ServiceStatus;
+    detail?: string;
   };
   push: {
     token?: string;
@@ -65,6 +66,7 @@ const AppStateContext = createContext<AppState | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [realtimeStatus, setRealtimeStatus] = useState<ServiceStatus>("idle");
+  const [realtimeDetail, setRealtimeDetail] = useState<string | undefined>();
   const [pushToken, setPushToken] = useState<string | undefined>();
   const [pushPermission, setPushPermission] = useState("not requested");
   const [pollingStatus, setPollingStatus] = useState<"idle" | "running" | "disabled" | "error">("idle");
@@ -103,6 +105,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return aiDebugLog.subscribe(setAiDebugLogs);
+  }, []);
+
+  useEffect(() => {
+    return realtimeService.subscribe((event) => {
+      if (event.type === "WebSocketClosed") {
+        const payload = event.payload as { code?: number; reason?: string; wasClean?: boolean };
+        setRealtimeDetail(`closed ${payload.code ?? "unknown"}${payload.reason ? `: ${payload.reason}` : ""}`);
+        return;
+      }
+      if (event.type === "WebSocketError") {
+        setRealtimeDetail("websocket error");
+        return;
+      }
+      setRealtimeDetail(event.type);
+    });
   }, []);
 
   useEffect(() => {
@@ -260,7 +277,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         user
       },
       realtime: {
-        status: realtimeStatus
+        status: realtimeStatus,
+        detail: realtimeDetail
       },
       push: {
         token: pushToken,
@@ -501,7 +519,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     // Action closures intentionally capture the current state snapshot used by optimistic UI updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
+    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

@@ -1,6 +1,6 @@
 # Pulse
 
-Pulse is the Android-first native mobile companion for the Roots ecosystem. It is built with Expo React Native and connects directly to `https://nexus.eresea.net` for auth, HTTP APIs, SignalR realtime events, Firebase Cloud Messaging push delivery, and polling fallback.
+Pulse is the Android-first native mobile companion for the Roots ecosystem. It is built with Expo React Native and connects directly to `https://nexus.eresea.net` for auth, HTTP APIs, user-scoped websocket realtime events, Firebase Cloud Messaging push delivery, and polling fallback.
 
 The first version is an app shell: it establishes the project structure, native UI direction, service boundaries, update policy, and debug surfaces needed to grow into the full Roots mobile experience.
 
@@ -9,7 +9,6 @@ The first version is an app shell: it establishes the project structure, native 
 - Expo + React Native + TypeScript
 - Expo Router for app navigation
 - NativeWind and shadcn-style local components inspired by React Native Reusables
-- `@microsoft/signalr` for Roots realtime hubs
 - React Native Firebase Messaging for Android FCM
 - `expo-secure-store` for access token persistence
 - `expo-updates` configured for Nexus-hosted OTA manifests and assets
@@ -64,13 +63,11 @@ Known auth endpoints:
 - `POST /api/auth/refresh`
 - `POST /api/auth/user/{userId}/device`
 
-Known SignalR hubs:
+Known realtime endpoint:
 
-- `/api/chatHub`
-- `/api/bellumHub`
-- `/api/battleHub`
+- `GET /ws/v1/user`
 
-SignalR access tokens are sent through the SignalR `accessTokenFactory`, matching the existing Roots backend behavior.
+Websocket access tokens are sent as an `access_token` query parameter because React Native's websocket API does not reliably support custom headers.
 
 ## Push Notifications
 
@@ -90,11 +87,11 @@ The device payload follows the existing Roots `DeviceInfo` shape: device id, FCM
 
 ## Realtime And Polling
 
-Realtime is the preferred event path. Pulse connects to SignalR first and keeps polling as a fallback for degraded or background states.
+Realtime is the preferred event path. Pulse connects to the Nexus user websocket first and keeps polling as a fallback for degraded or background states.
 
 Current shell behavior:
 
-- Home shows auth, SignalR, FCM, polling, and update state.
+- Home shows auth, websocket, FCM, polling, and update state.
 - Inbox defines the event landing zone for chat, Bellum, and push events.
 - Settings exposes API, update URL, runtime, and service status.
 

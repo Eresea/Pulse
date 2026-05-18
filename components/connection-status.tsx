@@ -16,7 +16,9 @@ export function ConnectionStatus() {
           <Text className="text-sm font-semibold text-foreground dark:text-slate-100">
             {connected ? "Realtime connected" : "Realtime standby"}
           </Text>
-          <Text className="text-xs text-muted-foreground dark:text-slate-400">Fallback: {polling.status}</Text>
+          <Text className="text-xs text-muted-foreground dark:text-slate-400">
+            {realtime.detail ? realtime.detail : `Fallback: ${polling.status}`}
+          </Text>
         </View>
       </View>
       <View className={connected ? "size-2 rounded-full bg-primary" : "size-2 rounded-full bg-muted-foreground"} />
