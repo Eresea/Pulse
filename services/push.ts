@@ -1,12 +1,12 @@
-import { Platform } from "react-native";
-import * as Application from "expo-application";
-import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
-import { getApp } from "@react-native-firebase/app";
-import { getMessaging, getToken, onTokenRefresh, registerDeviceForRemoteMessages } from "@react-native-firebase/messaging";
 import { appConfig } from "@/config/app-config";
 import { rootsApi } from "@/services/roots-api";
 import type { DeviceInfo } from "@/services/types";
+import { getApp } from "@react-native-firebase/app";
+import { getMessaging, getToken, onTokenRefresh, registerDeviceForRemoteMessages } from "@react-native-firebase/messaging";
+import * as Application from "expo-application";
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
+import { Platform } from "react-native";
 
 type TokenRefreshListener = (token: string) => void;
 
@@ -60,7 +60,7 @@ export const pushService = {
       deviceId: androidId ?? fallbackDeviceId,
       fcmToken,
       platform: Platform.OS === "android" || Platform.OS === "ios" || Platform.OS === "web" ? Platform.OS : "unknown",
-      userAgent: `${Device.manufacturer ?? "Unknown"} ${Device.modelName ?? "device"} / Pulse ${Application.nativeApplicationVersion ?? "0.1.0"}`
+      userAgent: `${Device.manufacturer ?? "Unknown"} ${Device.modelName ?? "device"} / Pulse ${Application.nativeApplicationVersion ?? "0.1.1"}`
     };
   }
 };

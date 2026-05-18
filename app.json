@@ -3,7 +3,7 @@
     "name": "Pulse",
     "slug": "pulse",
     "scheme": "pulse",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon-1024.png",
     "userInterfaceStyle": "automatic",
