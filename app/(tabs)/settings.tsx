@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import { router } from "expo-router";
+import type { Href } from "expo-router";
 import { Text, View } from "react-native";
 import { PageHeader } from "@/components/drawer-shell";
 import { Screen, ScreenScrollView } from "@/components/screen";
@@ -72,6 +73,9 @@ export default function SettingsScreen() {
             <SettingRow label="FCM permission" value={push.permissionStatus} />
             <SettingRow label="Polling" value={polling.status} />
             <SettingRow label="Updates" value={updates.status} />
+            <Button onPress={() => router.push("/(tabs)/settings/ai-diagnostics" as Href)} variant="outline">
+              AI Diagnostics
+            </Button>
             <Button onPress={actions.checkForUpdates} variant="outline">
               Check for Updates
             </Button>

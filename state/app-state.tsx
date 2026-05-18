@@ -1,11 +1,12 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { aiDebugLog, createAiTraceId } from "@/services/ai-debug-log";
 import { aiChatService } from "@/services/ai-chat";
 import { authService } from "@/services/auth";
 import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
 import { realtimeService } from "@/services/realtime";
 import { updateService } from "@/services/updates";
-import type { AiChatMessage, AiChatModel, AiChatThread, ServiceStatus, UserInfo } from "@/services/types";
+import type { AiChatMessage, AiChatModel, AiChatThread, AiDebugLogEntry, ServiceStatus, UserInfo } from "@/services/types";
 
 type AppState = {
   session: {
@@ -37,9 +38,13 @@ type AppState = {
     streamingThreadId?: string;
     error?: string;
   };
+  aiDebug: {
+    logs: AiDebugLogEntry[];
+  };
   actions: {
     bootstrap: () => void;
     checkForUpdates: () => void;
+    clearAiDebugLogs: () => void;
     completeLogin: (accessToken: string, refreshToken?: string) => Promise<void>;
     createAiThread: () => Promise<AiChatThread>;
     loadAiModels: () => Promise<AiChatModel[]>;
@@ -74,6 +79,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [loadingAiThreadId, setLoadingAiThreadId] = useState<string | undefined>();
   const [streamingAiThreadId, setStreamingAiThreadId] = useState<string | undefined>();
   const [aiChatError, setAiChatError] = useState<string | undefined>();
+  const [aiDebugLogs, setAiDebugLogs] = useState<AiDebugLogEntry[]>([]);
   const userRefreshPromise = useRef<Promise<UserInfo> | null>(null);
   const aiModelsPromise = useRef<Promise<AiChatModel[]> | null>(null);
   const aiThreadsPromise = useRef<Promise<AiChatThread[]> | null>(null);
@@ -90,6 +96,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       .checkFetchAndReload()
       .then((result) => setUpdateStatus(result.status))
       .catch(() => setUpdateStatus("error"));
+  }, []);
+
+  useEffect(() => {
+    return aiDebugLog.subscribe(setAiDebugLogs);
   }, []);
 
   useEffect(() => {
@@ -149,6 +159,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         streamingThreadId: streamingAiThreadId,
         error: aiChatError
       },
+      aiDebug: {
+        logs: aiDebugLogs
+      },
       actions: {
         bootstrap: () => {
           realtimeService.subscribeStatus(setRealtimeStatus);
@@ -171,6 +184,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             .checkAndFetch()
             .then((result) => setUpdateStatus(result.status))
             .catch(() => setUpdateStatus("error"));
+        },
+        clearAiDebugLogs: () => {
+          aiDebugLog.clear();
         },
         completeLogin: async (accessToken: string, refreshToken?: string) => {
           const nextUser = await authService.completeLogin({ accessToken, refreshToken, tokenType: "Bearer" });
@@ -287,6 +303,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         },
         sendAiMessage: async (threadId: string, content: string) => {
           const now = new Date().toISOString();
+          const traceId = createAiTraceId();
           const userMessage: AiChatMessage = {
             id: `local-user-${Date.now()}`,
             threadId,
@@ -305,6 +322,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           };
 
           setAiChatError(undefined);
+          aiDebugLog.add({
+            event: "send.started",
+            traceId,
+            metadata: {
+              threadId,
+              promptLength: content.length,
+              existingMessageCount: (aiMessagesByThread[threadId] ?? []).length
+            }
+          });
           setStreamingAiThreadId(threadId);
           setAiMessagesByThread((current) => ({
             ...current,
@@ -323,8 +349,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           try {
             let receivedAssistantContent = false;
             const modelId = selectedAiModelId ?? aiModels.find((model) => model.defaultModel)?.id ?? aiModels[0]?.id;
+            aiDebugLog.add({
+              event: "model.selected",
+              traceId,
+              modelId,
+              metadata: { selectedModelId: selectedAiModelId, availableModels: aiModels.length }
+            });
             await aiChatService.sendMessageStream({
               modelId,
+              traceId,
               messages: [...priorMessages.filter((message) => message.status !== "error"), userMessage],
               onEvent: (event) => {
                 if (event.type === "thread") {
@@ -347,12 +380,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               }
             });
             if (!receivedAssistantContent) {
+              aiDebugLog.add({
+                level: "error",
+                event: "send.empty_response",
+                traceId,
+                modelId,
+                message: "Nexus AI returned an empty response."
+              });
               throw new Error("Nexus AI returned an empty response.");
             }
 
+            aiDebugLog.add({ event: "send.completed", traceId, modelId });
             setAiMessagesByThread((current) => markThreadMessagesSent(current, threadId));
             setAiThreads((current) => touchThread(current, threadId, { status: "idle", lastActivityAt: new Date().toISOString() }));
           } catch (err) {
+            aiDebugLog.add({
+              level: "error",
+              event: "send.failed",
+              traceId,
+              message: err instanceof Error ? err.message : "Could not send message."
+            });
             setAiChatError(err instanceof Error ? err.message : "Could not send message.");
             setAiMessagesByThread((current) => markThreadMessagesError(current, threadId));
             setAiThreads((current) => touchThread(current, threadId, { status: "error" }));
@@ -371,7 +418,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         }
       }
     }),
-    [aiChatError, aiMessagesByThread, aiModels, aiThreads, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
+    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

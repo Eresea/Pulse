@@ -27,6 +27,7 @@ export default function TabsLayout() {
         <Stack.Screen name="chat/[threadId]" />
         <Stack.Screen name="profile" />
         <Stack.Screen name="settings" />
+        <Stack.Screen name="settings/ai-diagnostics" />
       </Stack>
     </DrawerShell>
   );

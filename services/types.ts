@@ -115,3 +115,19 @@ export type AiChatStreamEvent =
   | { type: "delta"; delta: string }
   | { type: "done" }
   | { type: "error"; message: string };
+
+export type AiDebugLogLevel = "debug" | "info" | "warn" | "error";
+
+export type AiDebugLogSource = "pulse" | "nexus";
+
+export type AiDebugLogEntry = {
+  id: string;
+  timestamp: string;
+  level: AiDebugLogLevel;
+  source: AiDebugLogSource;
+  event: string;
+  traceId?: string;
+  modelId?: string;
+  message?: string;
+  metadata?: Record<string, string | number | boolean | null | undefined>;
+};
