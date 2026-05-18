@@ -2,7 +2,6 @@ import { Activity, Radio, RefreshCcw, ShieldCheck, Smartphone } from "lucide-rea
 import { Text, View } from "react-native";
 import { Screen, ScreenScrollView } from "@/components/screen";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConnectionStatus } from "@/components/connection-status";
 import { PageHeader } from "@/components/drawer-shell";
@@ -10,7 +9,7 @@ import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 
 export default function HomeScreen() {
-  const { session, realtime, push, polling, updates, actions } = useAppState();
+  const { session, realtime, push, polling, updates } = useAppState();
   const { colors } = useTheme();
 
   return (
@@ -33,9 +32,6 @@ export default function HomeScreen() {
             <StatusRow icon={ShieldCheck} label="Auth" value={session.isAuthenticated ? "Signed in" : "Guest shell"} iconColor={colors.icon} />
             <StatusRow icon={Radio} label="SignalR" value={realtime.status} iconColor={colors.icon} />
             <StatusRow icon={Smartphone} label="FCM" value={push.permissionStatus} iconColor={colors.icon} />
-            <Button onPress={actions.bootstrap} variant="default">
-              Bootstrap Services
-            </Button>
           </CardContent>
         </Card>
 

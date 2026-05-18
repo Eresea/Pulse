@@ -1,5 +1,6 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { useColorScheme, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type ThemeMode = "system" | "light" | "dark";
 type ResolvedTheme = "light" | "dark";
@@ -43,6 +44,7 @@ const darkColors = {
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+const themeModeKey = "pulse.settings.themeMode";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const systemScheme = useColorScheme();
@@ -50,11 +52,28 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const resolvedTheme: ResolvedTheme = mode === "system" ? (systemScheme === "dark" ? "dark" : "light") : mode;
   const colors = resolvedTheme === "dark" ? darkColors : lightColors;
 
+  useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(themeModeKey).then((storedMode) => {
+      if (!cancelled && isThemeMode(storedMode)) {
+        setMode(storedMode);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const setPersistentMode = (nextMode: ThemeMode) => {
+    setMode(nextMode);
+    void AsyncStorage.setItem(themeModeKey, nextMode);
+  };
+
   const value = useMemo(
     () => ({
       mode,
       resolvedTheme,
-      setMode,
+      setMode: setPersistentMode,
       colors
     }),
     [colors, mode, resolvedTheme]
@@ -65,6 +84,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       <View className={resolvedTheme === "dark" ? "dark flex-1" : "flex-1"}>{children}</View>
     </ThemeContext.Provider>
   );
+}
+
+function isThemeMode(value: string | null): value is ThemeMode {
+  return value === "system" || value === "light" || value === "dark";
 }
 
 export function useTheme() {

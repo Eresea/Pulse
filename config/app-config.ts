@@ -30,6 +30,12 @@ export const appConfig = {
   },
   ai: {
     models: "/api/v1/ai/models",
+    threads: "/api/v1/ai/chat/threads",
+    thread: (threadId: string) => `/api/v1/ai/chat/threads/${encodeURIComponent(threadId)}`,
+    messages: (threadId: string) => `/api/v1/ai/chat/threads/${encodeURIComponent(threadId)}/messages`,
     chatStream: "/api/v1/ai/chat/stream"
+  },
+  sync: {
+    events: undefined as string | undefined
   }
 } as const;

@@ -5,6 +5,7 @@ import { tokenStore } from "@/services/token-store";
 import type { AiChatMessage, AiChatModel, AiChatRole, AiChatStreamEvent, AiChatThread } from "@/services/types";
 
 type SendMessageOptions = {
+  threadId: string;
   messages: AiChatMessage[];
   modelId?: string;
   traceId?: string;
@@ -73,6 +74,11 @@ function normalizeRole(role: RawMessage["role"]): AiChatRole {
 function normalizeMessageList(result: unknown, threadId: string): AiChatMessage[] {
   const source = Array.isArray(result) ? result : Array.isArray((result as { messages?: unknown[] })?.messages) ? (result as { messages: unknown[] }).messages : [];
   return source.map((item) => ({ ...mapMessage(item as RawMessage), threadId }));
+}
+
+function normalizeThreadList(result: unknown): AiChatThread[] {
+  const source = Array.isArray(result) ? result : Array.isArray((result as { threads?: unknown[] })?.threads) ? (result as { threads: unknown[] }).threads : [];
+  return source.map((item) => mapThread(item as RawThread)).filter((thread) => thread.id);
 }
 
 function normalizeModelList(result: unknown): AiChatModel[] {
@@ -226,24 +232,21 @@ export const aiChatService = {
   },
 
   async listThreads(): Promise<AiChatThread[]> {
-    return [];
+    return normalizeThreadList(await rootsApi.request(appConfig.ai.threads));
   },
 
   async createThread(): Promise<AiChatThread> {
-    const now = new Date().toISOString();
-    return {
-      id: `local-thread-${Date.now()}`,
-      title: "New chat",
-      lastActivityAt: now,
-      status: "idle"
-    };
+    return mapThread(await rootsApi.request(appConfig.ai.threads, {
+      method: "POST",
+      body: JSON.stringify({ title: "New chat" })
+    }));
   },
 
   async listMessages(threadId: string): Promise<AiChatMessage[]> {
-    return normalizeMessageList([], threadId);
+    return normalizeMessageList(await rootsApi.request(appConfig.ai.messages(threadId)), threadId);
   },
 
-  async sendMessageStream({ messages, modelId, traceId, onEvent }: SendMessageOptions): Promise<void> {
+  async sendMessageStream({ threadId, messages, modelId, traceId, onEvent }: SendMessageOptions): Promise<void> {
     const resolvedModelId = modelId ?? (await aiChatService.listModels())[0]?.id;
     if (!resolvedModelId) {
       throw new Error("No Nexus AI model is available.");
@@ -276,14 +279,31 @@ export const aiChatService = {
       }
     });
 
-    const response = await fetch(`${appConfig.apiBaseUrl}${appConfig.ai.chatStream}`, {
+    let response = await rootsApi.authenticatedFetch(appConfig.ai.chatStream, {
       method: "POST",
       headers,
       body: JSON.stringify({
+        threadId,
         modelId: resolvedModelId,
         messages: requestMessages
       })
     });
+
+    if (response.status === 401) {
+      const nextToken = await rootsApi.refreshAccessToken();
+      if (nextToken) {
+        headers.set("Authorization", nextToken.startsWith("Bearer ") ? nextToken : `Bearer ${nextToken}`);
+        response = await rootsApi.authenticatedFetch(appConfig.ai.chatStream, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            threadId,
+            modelId: resolvedModelId,
+            messages: requestMessages
+          })
+        });
+      }
+    }
 
     aiDebugLog.add({
       event: "response.status",

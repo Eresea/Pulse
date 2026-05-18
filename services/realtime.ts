@@ -8,6 +8,7 @@ type StatusListener = (status: ServiceStatus) => void;
 
 export class RealtimeService {
   private chatConnection?: signalR.HubConnection;
+  private chatConnectionPromise?: Promise<void>;
   private listeners = new Set<RealtimeListener>();
   private statusListeners = new Set<StatusListener>();
 
@@ -24,6 +25,9 @@ export class RealtimeService {
   async connectChat() {
     if (this.chatConnection?.state === signalR.HubConnectionState.Connected) {
       return;
+    }
+    if (this.chatConnectionPromise) {
+      return this.chatConnectionPromise;
     }
 
     this.setStatus("connecting");
@@ -45,8 +49,22 @@ export class RealtimeService {
     this.chatConnection.onreconnected(() => this.setStatus("connected"));
     this.chatConnection.onclose(() => this.setStatus("idle"));
 
-    await this.chatConnection.start();
-    this.setStatus("connected");
+    this.chatConnectionPromise = this.chatConnection
+      .start()
+      .then(() => this.setStatus("connected"))
+      .catch((error) => {
+        this.setStatus(isMissingHubError(error) ? "degraded" : "error");
+        this.emit("SignalRConnectionFailed", {
+          hub: appConfig.hubs.chat,
+          message: error instanceof Error ? error.message : String(error),
+          missingHub: isMissingHubError(error)
+        });
+      })
+      .finally(() => {
+        this.chatConnectionPromise = undefined;
+      });
+
+    return this.chatConnectionPromise;
   }
 
   async disconnect() {
@@ -67,6 +85,7 @@ export class RealtimeService {
         }
       })
       .withAutomaticReconnect()
+      .configureLogging(__DEV__ ? signalR.LogLevel.Warning : signalR.LogLevel.Error)
       .build();
   }
 
@@ -87,3 +106,8 @@ export class RealtimeService {
 }
 
 export const realtimeService = new RealtimeService();
+
+function isMissingHubError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("Status code '404'") || message.includes("404 page not found");
+}

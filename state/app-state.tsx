@@ -1,4 +1,5 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState as RNAppState } from "react-native";
 import { aiDebugLog, createAiTraceId } from "@/services/ai-debug-log";
 import { aiChatService } from "@/services/ai-chat";
 import { authService } from "@/services/auth";
@@ -22,7 +23,7 @@ type AppState = {
     permissionStatus: string;
   };
   polling: {
-    status: "idle" | "running" | "error";
+    status: "idle" | "running" | "disabled" | "error";
   };
   updates: {
     status: string;
@@ -66,7 +67,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [realtimeStatus, setRealtimeStatus] = useState<ServiceStatus>("idle");
   const [pushToken, setPushToken] = useState<string | undefined>();
   const [pushPermission, setPushPermission] = useState("not requested");
-  const [pollingStatus, setPollingStatus] = useState<"idle" | "running" | "error">("idle");
+  const [pollingStatus, setPollingStatus] = useState<"idle" | "running" | "disabled" | "error">("idle");
   const [updateStatus, setUpdateStatus] = useState("idle");
   const [user, setUser] = useState<UserInfo | undefined>();
   const [isRestoringSession, setIsRestoringSession] = useState(true);
@@ -84,6 +85,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const aiModelsPromise = useRef<Promise<AiChatModel[]> | null>(null);
   const aiThreadsPromise = useRef<Promise<AiChatThread[]> | null>(null);
   const autoUpdateStarted = useRef(false);
+  const bootstrappedUserId = useRef<string | undefined>(undefined);
+  const pushRefreshUnsubscribe = useRef<(() => void) | undefined>(undefined);
 
   useEffect(() => {
     if (autoUpdateStarted.current) {
@@ -128,6 +131,127 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!user) {
+      bootstrappedUserId.current = undefined;
+      return;
+    }
+
+    void bootstrapAuthenticatedServices(user);
+  // bootstrapAuthenticatedServices is intentionally kept with the current render state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  useEffect(() => {
+    const subscription = RNAppState.addEventListener("change", (state) => {
+      if (state === "active" && user) {
+        void bootstrapAuthenticatedServices(user);
+      }
+    });
+
+    return () => subscription.remove();
+  // bootstrapAuthenticatedServices is intentionally kept with the current render state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const bootstrapAuthenticatedServices = async (nextUser: UserInfo) => {
+    if (bootstrappedUserId.current === nextUser.userId) {
+      return;
+    }
+
+    bootstrappedUserId.current = nextUser.userId;
+    realtimeService.subscribeStatus(setRealtimeStatus);
+    void realtimeService.connectChat().catch(() => setRealtimeStatus("error"));
+
+    void pushService
+      .requestToken()
+      .then(async (result) => {
+        setPushToken(result.token);
+        setPushPermission(result.permissionStatus);
+        if (result.token && nextUser.userId) {
+          await pushService.registerDevice(nextUser.userId, result.token);
+          setPushPermission("registered");
+        }
+      })
+      .catch(() => setPushPermission("error"));
+
+    pushRefreshUnsubscribe.current?.();
+    pushRefreshUnsubscribe.current = pushService.onTokenRefresh((token) => {
+      setPushToken(token);
+      if (nextUser.userId) {
+        void pushService
+          .registerDevice(nextUser.userId, token)
+          .then(() => setPushPermission("registered"))
+          .catch(() => setPushPermission("registration-error"));
+      }
+    });
+
+    setPollingStatus(pollingService.start() ? "running" : "disabled");
+    void loadAiModelsAction().catch(() => undefined);
+    void loadAiThreadsAction().catch(() => undefined);
+  };
+
+  const clearAiState = () => {
+    setAiModels([]);
+    setSelectedAiModelId(undefined);
+    setAiThreads([]);
+    setAiMessagesByThread({});
+    setAiChatError(undefined);
+    aiModelsPromise.current = null;
+    aiThreadsPromise.current = null;
+  };
+
+  const loadAiModelsAction = async () => {
+    if (aiModels.length) {
+      return aiModels;
+    }
+    if (!aiModelsPromise.current) {
+      setIsLoadingAiModels(true);
+      setAiChatError(undefined);
+      aiModelsPromise.current = aiChatService
+        .listModels()
+        .then((models) => {
+          setAiModels(models);
+          setSelectedAiModelId((current) => current ?? models.find((model) => model.defaultModel)?.id ?? models[0]?.id);
+          return models;
+        })
+        .catch((err) => {
+          setAiChatError(err instanceof Error ? err.message : "Could not load AI models.");
+          throw err;
+        })
+        .finally(() => {
+          aiModelsPromise.current = null;
+          setIsLoadingAiModels(false);
+        });
+    }
+    return aiModelsPromise.current;
+  };
+
+  const loadAiThreadsAction = async () => {
+    if (aiThreads.length) {
+      return aiThreads;
+    }
+    if (!aiThreadsPromise.current) {
+      setIsLoadingAiThreads(true);
+      setAiChatError(undefined);
+      aiThreadsPromise.current = aiChatService
+        .listThreads()
+        .then((threads) => {
+          setAiThreads(threads);
+          return threads;
+        })
+        .catch((err) => {
+          setAiChatError(err instanceof Error ? err.message : "Could not load AI threads.");
+          throw err;
+        })
+        .finally(() => {
+          aiThreadsPromise.current = null;
+          setIsLoadingAiThreads(false);
+        });
+    }
+    return aiThreadsPromise.current;
+  };
+
   const value = useMemo<AppState>(
     () => ({
       session: {
@@ -164,24 +288,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       },
       actions: {
         bootstrap: () => {
-          realtimeService.subscribeStatus(setRealtimeStatus);
-          void realtimeService.connectChat().catch(() => setRealtimeStatus("error"));
-
-          void pushService
-            .requestToken()
-            .then((result) => {
-              setPushToken(result.token);
-              setPushPermission(result.permissionStatus);
-            })
-            .catch(() => setPushPermission("error"));
-
-          pollingService.start();
-          setPollingStatus("running");
+          if (user) {
+            void bootstrapAuthenticatedServices(user);
+          }
         },
         checkForUpdates: () => {
           setUpdateStatus("checking");
           void updateService
-            .checkAndFetch()
+            .checkFetchAndMaybeReload(true)
             .then((result) => setUpdateStatus(result.status))
             .catch(() => setUpdateStatus("error"));
         },
@@ -200,29 +314,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           return thread;
         },
         loadAiModels: async () => {
-          if (aiModels.length) {
-            return aiModels;
-          }
-          if (!aiModelsPromise.current) {
-            setIsLoadingAiModels(true);
-            setAiChatError(undefined);
-            aiModelsPromise.current = aiChatService
-              .listModels()
-              .then((models) => {
-                setAiModels(models);
-                setSelectedAiModelId((current) => current ?? models.find((model) => model.defaultModel)?.id ?? models[0]?.id);
-                return models;
-              })
-              .catch((err) => {
-                setAiChatError(err instanceof Error ? err.message : "Could not load AI models.");
-                throw err;
-              })
-              .finally(() => {
-                aiModelsPromise.current = null;
-                setIsLoadingAiModels(false);
-              });
-          }
-          return aiModelsPromise.current;
+          return loadAiModelsAction();
         },
         loadAiMessages: async (threadId: string) => {
           setLoadingAiThreadId(threadId);
@@ -239,28 +331,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           }
         },
         loadAiThreads: async () => {
-          if (aiThreads.length) {
-            return aiThreads;
-          }
-          if (!aiThreadsPromise.current) {
-            setIsLoadingAiThreads(true);
-            setAiChatError(undefined);
-            aiThreadsPromise.current = aiChatService
-              .listThreads()
-              .then((threads) => {
-                setAiThreads(threads);
-                return threads;
-              })
-              .catch((err) => {
-                setAiChatError(err instanceof Error ? err.message : "Could not load AI threads.");
-                throw err;
-              })
-              .finally(() => {
-                aiThreadsPromise.current = null;
-                setIsLoadingAiThreads(false);
-              });
-          }
-          return aiThreadsPromise.current;
+          return loadAiThreadsAction();
         },
         loginEmail: async (email: string, password: string) => {
           const nextUser = await authService.loginEmail({ email, password });
@@ -356,6 +427,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               metadata: { selectedModelId: selectedAiModelId, availableModels: aiModels.length }
             });
             await aiChatService.sendMessageStream({
+              threadId,
               modelId,
               traceId,
               messages: [...priorMessages.filter((message) => message.status !== "error"), userMessage],
@@ -393,6 +465,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             aiDebugLog.add({ event: "send.completed", traceId, modelId });
             setAiMessagesByThread((current) => markThreadMessagesSent(current, threadId));
             setAiThreads((current) => touchThread(current, threadId, { status: "idle", lastActivityAt: new Date().toISOString() }));
+            void aiChatService
+              .listMessages(threadId)
+              .then((messages) => setAiMessagesByThread((current) => ({ ...current, [threadId]: messages })))
+              .catch(() => undefined);
           } catch (err) {
             aiDebugLog.add({
               level: "error",
@@ -410,14 +486,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         },
         signOut: async () => {
           await authService.signOut();
+          pushRefreshUnsubscribe.current?.();
+          pushRefreshUnsubscribe.current = undefined;
+          pollingService.stop();
+          await realtimeService.disconnect().catch(() => undefined);
+          bootstrappedUserId.current = undefined;
           setUser(undefined);
-          setAiModels([]);
-          setSelectedAiModelId(undefined);
-          setAiThreads([]);
-          setAiMessagesByThread({});
+          setPushToken(undefined);
+          setPushPermission("not requested");
+          setPollingStatus("idle");
+          clearAiState();
         }
       }
     }),
+    // Action closures intentionally capture the current state snapshot used by optimistic UI updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
   );
 

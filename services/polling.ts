@@ -15,12 +15,18 @@ export class PollingService {
 
   start() {
     if (this.timer) {
-      return;
+      return true;
+    }
+
+    const endpoint = appConfig.sync.events;
+    if (!endpoint) {
+      return false;
     }
 
     this.timer = setInterval(() => {
       void this.tick();
     }, appConfig.pollingIntervalMs);
+    return true;
   }
 
   stop() {
@@ -32,10 +38,12 @@ export class PollingService {
 
   private async tick() {
     try {
-      await rootsApi.request<unknown>("/api/auth/refresh", {
-        method: "POST",
-        body: JSON.stringify({})
-      });
+      const endpoint = appConfig.sync.events;
+      if (!endpoint) {
+        this.stop();
+        return;
+      }
+      await rootsApi.request<unknown>(endpoint);
       this.emit("poll-ok", { checkedAt: new Date().toISOString() });
     } catch (error) {
       this.emit("poll-error", error instanceof Error ? error.message : String(error));

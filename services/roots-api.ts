@@ -13,6 +13,10 @@ export class RootsApi {
     return this.parseResponse<T>(response);
   }
 
+  async authenticatedFetch(path: string, options: RequestInit = {}): Promise<Response> {
+    return this.fetch(path, { ...options, authenticated: true });
+  }
+
   private async fetch(path: string, options: RequestOptions) {
     const headers = new Headers(options.headers);
     headers.set("Accept", "application/json");
@@ -57,7 +61,7 @@ export class RootsApi {
     return response;
   }
 
-  private async refreshAccessToken() {
+  async refreshAccessToken() {
     const refreshToken = await tokenStore.getRefreshToken();
     if (!refreshToken) {
       return null;
