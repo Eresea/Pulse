@@ -35,10 +35,14 @@ async function storeAuthResult(result: NexusAuthResult) {
   if (!result.accessToken) {
     throw new Error("Nexus did not return an access token.");
   }
-  await tokenStore.setAccessToken(result.tokenType === "Bearer" ? `Bearer ${result.accessToken}` : result.accessToken);
+  await tokenStore.setAccessToken(result.tokenType === "Bearer" ? `Bearer ${result.accessToken}` : result.accessToken, expiresAtFromResult(result));
   if (result.refreshToken) {
     await tokenStore.setRefreshToken(result.refreshToken);
   }
+}
+
+function expiresAtFromResult(result: NexusAuthResult) {
+  return result.expiresIn ? Date.now() + result.expiresIn * 1000 : undefined;
 }
 
 export const authService = {

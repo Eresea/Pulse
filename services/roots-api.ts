@@ -26,6 +26,9 @@ export class RootsApi {
     }
 
     if (options.authenticated !== false) {
+      if (await tokenStore.isAccessTokenExpired()) {
+        await this.refreshAccessToken();
+      }
       const token = await tokenStore.getAccessToken();
       if (token) {
         headers.set("Authorization", token.startsWith("Bearer ") ? token : `Bearer ${token}`);
@@ -80,13 +83,13 @@ export class RootsApi {
       return null;
     }
 
-    const result = (await response.json()) as { accessToken?: string; refreshToken?: string; tokenType?: string };
+    const result = (await response.json()) as { accessToken?: string; refreshToken?: string; tokenType?: string; expiresIn?: number };
     if (!result.accessToken) {
       return null;
     }
 
     const accessToken = result.tokenType === "Bearer" ? `Bearer ${result.accessToken}` : result.accessToken;
-    await tokenStore.setAccessToken(accessToken);
+    await tokenStore.setAccessToken(accessToken, result.expiresIn ? Date.now() + result.expiresIn * 1000 : undefined);
     if (result.refreshToken) {
       await tokenStore.setRefreshToken(result.refreshToken);
     }

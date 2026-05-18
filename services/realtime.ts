@@ -1,4 +1,5 @@
 import { appConfig } from "@/config/app-config";
+import { rootsApi } from "@/services/roots-api";
 import { tokenStore } from "@/services/token-store";
 import type { RootsEvent, ServiceStatus } from "@/services/types";
 
@@ -30,6 +31,7 @@ export class RealtimeService {
   private connectPromise?: Promise<void>;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private shouldReconnect = false;
+  private refreshedForCurrentAttempt = false;
   private listeners = new Set<RealtimeListener>();
   private statusListeners = new Set<StatusListener>();
 
@@ -60,6 +62,7 @@ export class RealtimeService {
     }
 
     this.shouldReconnect = true;
+    this.refreshedForCurrentAttempt = false;
     this.setStatus("connecting");
     this.connectPromise = this.openSocket().finally(() => {
       this.connectPromise = undefined;
@@ -121,7 +124,23 @@ export class RealtimeService {
         this.emit("WebSocketClosed", { code: event.code, reason: event.reason, wasClean: event.wasClean });
         if (!settled) {
           settled = true;
-          if (retry) {
+          if (authFailure && !this.refreshedForCurrentAttempt) {
+            this.refreshedForCurrentAttempt = true;
+            void rootsApi
+              .refreshAccessToken()
+              .then((token) => {
+                if (token && this.shouldReconnect) {
+                  this.setStatus("connecting");
+                  return this.openSocket();
+                }
+                throw new Error("Could not refresh websocket token.");
+              })
+              .catch((error) => {
+                this.setStatus("error");
+                this.emit("WebSocketAuthFailed", { message: error instanceof Error ? error.message : String(error) });
+              });
+            resolve();
+          } else if (retry) {
             resolve();
           } else {
             reject(new Error(`User websocket closed before opening (${event.code}).`));
@@ -142,8 +161,13 @@ export class RealtimeService {
     };
 
     const token = await tokenStore.getAccessToken();
-    if (token) {
-      const bearerToken = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+    if (!token || (await tokenStore.isAccessTokenExpired())) {
+      await rootsApi.refreshAccessToken();
+    }
+
+    const refreshedToken = await tokenStore.getAccessToken();
+    if (refreshedToken) {
+      const bearerToken = refreshedToken.startsWith("Bearer ") ? refreshedToken : `Bearer ${refreshedToken}`;
       headers.Authorization = bearerToken;
       base.searchParams.set("access_token", bearerToken.replace("Bearer ", ""));
     }

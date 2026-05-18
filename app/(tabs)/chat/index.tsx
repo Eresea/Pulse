@@ -35,6 +35,8 @@ export default function AiChatScreen() {
     try {
       const thread = await actions.createAiThread();
       router.push(threadHref(thread.id));
+    } catch {
+      // App state owns the user-facing AI error message.
     } finally {
       setCreating(false);
     }
