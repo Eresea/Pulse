@@ -53,8 +53,6 @@ const profileDestination: DrawerDestination = {
   match: (pathname) => pathname.includes("/profile"),
 };
 
-const drawerRoutes = [...mainDestinations.map((item) => item.href), profileDestination.href, "/(tabs)/settings" as const];
-
 function getPrimaryHref(pathname: string): PrimaryDrawerHref | undefined {
   if (pathname.includes("/inbox")) {
     return "/(tabs)/inbox";
@@ -97,7 +95,7 @@ export function PageHeader({ title }: { title: string }) {
 
 export function DrawerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { session, aiChat, actions } = useAppState();
+  const { session, aiChat } = useAppState();
   const { width: screenWidth } = useWindowDimensions();
   const { colors } = useTheme();
   const profileLabel = session.user?.name || session.user?.email || "Profile";
@@ -151,14 +149,9 @@ export function DrawerShell({ children }: { children: ReactNode }) {
     snapTo(true);
 
     requestAnimationFrame(() => {
-      drawerRoutes.forEach((href) => {
-        router.prefetch(href as Href);
-      });
-      void actions.prefetchUser();
-      void actions.loadAiThreads().catch(() => undefined);
       restorePrimaryRoute();
     });
-  }, [actions, restorePrimaryRoute, snapTo]);
+  }, [restorePrimaryRoute, snapTo]);
 
   const closeMenu = useCallback(() => {
     snapTo(false);

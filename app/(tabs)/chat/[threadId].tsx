@@ -20,6 +20,8 @@ type ComposerAttachment = {
   uri: string;
 };
 
+const KEYBOARD_COMPOSER_GAP = 12;
+
 export default function AiChatThreadScreen() {
   const params = useLocalSearchParams<{ threadId?: string }>();
   const threadId = Array.isArray(params.threadId) ? params.threadId[0] : params.threadId;
@@ -91,7 +93,7 @@ export default function AiChatThreadScreen() {
   }, [windowHeight]);
 
   const title = useMemo(() => thread?.title || "AI Chat", [thread?.title]);
-  const composerBottomPadding = Platform.OS === "android" && keyboardOverlap > 0 ? Math.max(8, keyboardOverlap - insets.bottom) : 12;
+  const composerBottomPadding = Platform.OS === "android" && keyboardOverlap > 0 ? Math.max(8, keyboardOverlap - insets.bottom + KEYBOARD_COMPOSER_GAP) : 12;
 
   const sendMessage = async () => {
     if (!canSend || !threadId) {
