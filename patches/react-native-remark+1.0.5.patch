@@ -1,0 +1,10 @@
+diff --git a/node_modules/react-native-remark/dist/index.mjs b/node_modules/react-native-remark/dist/index.mjs
+index 7d1bf53..b49f9ee 100644
+--- a/node_modules/react-native-remark/dist/index.mjs
++++ b/node_modules/react-native-remark/dist/index.mjs
+@@ -449 +449 @@
+-    /* @__PURE__ */ jsx9(View3, { style: { flex: 1 }, children: node.children.map((child, idx) => /* @__PURE__ */ jsxs3(Fragment2, { children: [
++    /* @__PURE__ */ jsx9(View3, { children: node.children.map((child, idx) => /* @__PURE__ */ jsxs3(Fragment2, { children: [
+@@ -1856 +1856 @@
+-  return /* @__PURE__ */ jsx25(View10, { onLayout, style: { flex: 1 }, children: /* @__PURE__ */ jsx25(
++  return /* @__PURE__ */ jsx25(View10, { onLayout, children: /* @__PURE__ */ jsx25(

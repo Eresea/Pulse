@@ -7,7 +7,7 @@ import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
 import { realtimeService } from "@/services/realtime";
 import { updateService } from "@/services/updates";
-import type { AiChatMessage, AiChatModel, AiChatThread, AiDebugLogEntry, ServiceStatus, UserInfo } from "@/services/types";
+import type { AiChatMessage, AiChatModel, AiChatThread, AiChatTimelineEvent, AiDebugLogEntry, ServiceStatus, UserInfo } from "@/services/types";
 
 type AppState = {
   session: {
@@ -34,6 +34,7 @@ type AppState = {
     selectedModelId?: string;
     threads: AiChatThread[];
     messagesByThread: Record<string, AiChatMessage[]>;
+    timelineEventsByThread: Record<string, AiChatTimelineEvent[]>;
     isLoadingModels: boolean;
     isLoadingThreads: boolean;
     loadingThreadId?: string;
@@ -57,6 +58,7 @@ type AppState = {
     refreshUser: () => Promise<UserInfo>;
     registerEmail: (email: string, password: string, displayName: string) => Promise<void>;
     selectAiModel: (modelId: string) => void;
+    renameAiThread: (threadId: string, title: string) => Promise<AiChatThread>;
     sendAiMessage: (threadId: string, content: string) => Promise<void>;
     signOut: () => Promise<void>;
   };
@@ -77,6 +79,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [selectedAiModelId, setSelectedAiModelId] = useState<string | undefined>();
   const [aiThreads, setAiThreads] = useState<AiChatThread[]>([]);
   const [aiMessagesByThread, setAiMessagesByThread] = useState<Record<string, AiChatMessage[]>>({});
+  const [aiTimelineEventsByThread, setAiTimelineEventsByThread] = useState<Record<string, AiChatTimelineEvent[]>>({});
   const [isLoadingAiModels, setIsLoadingAiModels] = useState(false);
   const [isLoadingAiThreads, setIsLoadingAiThreads] = useState(false);
   const [loadingAiThreadId, setLoadingAiThreadId] = useState<string | undefined>();
@@ -213,6 +216,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setSelectedAiModelId(undefined);
     setAiThreads([]);
     setAiMessagesByThread({});
+    setAiTimelineEventsByThread({});
     setAiChatError(undefined);
     aiModelsPromise.current = null;
     aiThreadsPromise.current = null;
@@ -295,6 +299,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         selectedModelId: selectedAiModelId,
         threads: aiThreads,
         messagesByThread: aiMessagesByThread,
+        timelineEventsByThread: aiTimelineEventsByThread,
         isLoadingModels: isLoadingAiModels,
         isLoadingThreads: isLoadingAiThreads,
         loadingThreadId: loadingAiThreadId,
@@ -329,6 +334,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           const thread = await aiChatService.createThread();
           setAiThreads((current) => mergeThread(current, thread));
           setAiMessagesByThread((current) => ({ ...current, [thread.id]: current[thread.id] ?? [] }));
+          setAiTimelineEventsByThread((current) => ({ ...current, [thread.id]: current[thread.id] ?? [] }));
           return thread;
         },
         loadAiModels: async () => {
@@ -389,6 +395,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         },
         selectAiModel: (modelId: string) => {
           setSelectedAiModelId(modelId);
+        },
+        renameAiThread: async (threadId: string, title: string) => {
+          setAiChatError(undefined);
+          const previousThread = aiThreads.find((thread) => thread.id === threadId);
+          setAiThreads((current) => touchThread(current, threadId, { title }));
+          try {
+            const thread = await aiChatService.renameThread(threadId, title);
+            setAiThreads((current) => mergeThread(current, thread));
+            return thread;
+          } catch (err) {
+            if (previousThread) {
+              setAiThreads((current) => mergeThread(current, previousThread));
+            }
+            setAiChatError(err instanceof Error ? err.message : "Could not rename thread.");
+            throw err;
+          }
         },
         sendAiMessage: async (threadId: string, content: string) => {
           const now = new Date().toISOString();
@@ -459,12 +481,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                   setAiMessagesByThread((current) => replaceOrAppendMessage(current, threadId, event.message, assistantMessage.id));
                   return;
                 }
-                if (event.type === "delta") {
-                  receivedAssistantContent = receivedAssistantContent || Boolean(event.delta);
-                  setAiMessagesByThread((current) => appendAssistantDelta(current, threadId, assistantMessage.id, event.delta));
+            if (event.type === "delta") {
+              receivedAssistantContent = receivedAssistantContent || Boolean(event.delta);
+              setAiMessagesByThread((current) => appendAssistantDelta(current, threadId, assistantMessage.id, event.delta));
+              return;
+            }
+                if (
+                  event.type === "status" ||
+                  event.type === "tool_call" ||
+                  event.type === "tool_result" ||
+                  event.type === "confirmation_request" ||
+                  event.type === "confirmation_response" ||
+                  event.type === "usage"
+                ) {
+                  setAiTimelineEventsByThread((current) => appendTimelineEvent(current, threadId, event));
                   return;
                 }
                 if (event.type === "error") {
+                  setAiTimelineEventsByThread((current) => appendTimelineEvent(current, threadId, event));
                   throw new Error(event.message);
                 }
               }
@@ -519,7 +553,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     // Action closures intentionally capture the current state snapshot used by optimistic UI updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
+    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, aiTimelineEventsByThread, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
@@ -579,6 +613,35 @@ function markThreadMessagesError(current: Record<string, AiChatMessage[]>, threa
   return {
     ...current,
     [threadId]: (current[threadId] ?? []).map((message): AiChatMessage => (message.status === "sending" || message.status === "streaming" ? { ...message, status: "error" } : message))
+  };
+}
+
+function appendTimelineEvent(
+  current: Record<string, AiChatTimelineEvent[]>,
+  threadId: string,
+  event: AiChatTimelineEvent["event"]
+): Record<string, AiChatTimelineEvent[]> {
+  const createdAt = new Date().toISOString();
+  const eventId =
+    event.type === "tool_call"
+      ? event.toolCall.id
+      : event.type === "tool_result"
+        ? `${event.result.toolCallId}-result-${createdAt}`
+        : event.type === "confirmation_request"
+          ? event.confirmation.id
+          : event.type === "confirmation_response"
+            ? `${event.response.id}-response-${createdAt}`
+            : `${event.type}-${createdAt}`;
+  const timelineEvent: AiChatTimelineEvent = {
+    id: eventId,
+    threadId,
+    createdAt,
+    event
+  };
+
+  return {
+    ...current,
+    [threadId]: [...(current[threadId] ?? []).filter((item) => item.id !== eventId), timelineEvent]
   };
 }
 

@@ -1,11 +1,14 @@
 import * as DocumentPicker from "expo-document-picker";
-import { ArrowLeft, Bot, File, Plus, SendHorizontal, X } from "lucide-react-native";
+import * as Clipboard from "expo-clipboard";
+import { ArrowLeft, Bot, Check, File, Pencil, Plus, SendHorizontal, X } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, FlatList, Keyboard, KeyboardAvoidingView, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { MessageRenderer } from "@/components/ai-chat/message-renderer";
+import { ConfirmationCard, ErrorCard, MessageActionButton, StatusCard, ToolCallCard, ToolResultCard } from "@/components/ai-chat/timeline-cards";
 import { cn } from "@/lib/cn";
-import type { AiChatMessage, AiChatModel } from "@/services/types";
+import type { AiChatMessage, AiChatModel, AiChatTimelineEvent } from "@/services/types";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 
@@ -23,16 +26,23 @@ export default function AiChatThreadScreen() {
   const { aiChat, actions } = useAppState();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
-  const scrollRef = useRef<ScrollView>(null);
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const listRef = useRef<FlatList<TimelineItem>>(null);
+  const stickToBottomRef = useRef(true);
   const didLoadModels = useRef(false);
   const [draft, setDraft] = useState("");
   const [sendError, setSendError] = useState<string | undefined>();
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [keyboardOverlap, setKeyboardOverlap] = useState(0);
-  const messages = threadId ? aiChat.messagesByThread[threadId] ?? [] : [];
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [composerHeight, setComposerHeight] = useState(0);
+  const messages = useMemo(() => (threadId ? aiChat.messagesByThread[threadId] ?? [] : []), [aiChat.messagesByThread, threadId]);
+  const timelineEvents = useMemo(() => (threadId ? aiChat.timelineEventsByThread[threadId] ?? [] : []), [aiChat.timelineEventsByThread, threadId]);
   const lastMessageContent = messages.at(-1)?.content;
+  const timelineItems = useMemo(() => buildTimeline(messages, timelineEvents), [messages, timelineEvents]);
   const thread = aiChat.threads.find((item) => item.id === threadId);
   const isStreaming = Boolean(threadId && aiChat.streamingThreadId === threadId);
   const isLoading = Boolean(threadId && aiChat.loadingThreadId === threadId && !messages.length);
@@ -59,7 +69,7 @@ export default function AiChatThreadScreen() {
   }, [actions]);
 
   useEffect(() => {
-    requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
   }, [lastMessageContent, messages.length]);
 
   useEffect(() => {
@@ -90,11 +100,60 @@ export default function AiChatThreadScreen() {
     const content = draft.trim();
     setDraft("");
     setSendError(undefined);
+    stickToBottomRef.current = true;
     try {
       await actions.sendAiMessage(threadId, content);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "Could not send message.");
       setDraft(content);
+    }
+  };
+
+  const startRename = () => {
+    setRenameDraft(title);
+    setSendError(undefined);
+    setRenaming(true);
+  };
+
+  const cancelRename = () => {
+    setRenaming(false);
+    setRenameDraft("");
+  };
+
+  const saveRename = async () => {
+    const nextTitle = renameDraft.replace(/\s+/g, " ").trim();
+    if (!threadId || !nextTitle || nextTitle === title) {
+      cancelRename();
+      return;
+    }
+    setRenameSaving(true);
+    setSendError(undefined);
+    try {
+      await actions.renameAiThread(threadId, nextTitle);
+      setRenaming(false);
+      setRenameDraft("");
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Could not rename thread.");
+    } finally {
+      setRenameSaving(false);
+    }
+  };
+
+  const retryFromMessage = async (message: AiChatMessage) => {
+    if (!threadId || isStreaming) {
+      return;
+    }
+    const messageIndex = messages.findIndex((item) => item.id === message.id);
+    const prompt = [...messages.slice(0, Math.max(messageIndex, 0))].reverse().find((item) => item.role === "user")?.content;
+    if (!prompt) {
+      setSendError("Could not find the prompt to retry.");
+      return;
+    }
+    setSendError(undefined);
+    try {
+      await actions.sendAiMessage(threadId, prompt);
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Could not retry message.");
     }
   };
 
@@ -132,10 +191,43 @@ export default function AiChatThreadScreen() {
           <Pressable accessibilityRole="button" accessibilityLabel="Back to AI threads" className="size-11 items-center justify-center rounded-full border border-border bg-card dark:border-neutral-800 dark:bg-black" onPress={() => router.back()}>
             <ArrowLeft color={colors.foreground} size={20} />
           </Pressable>
-          <View className="min-w-0 flex-1">
-            <Text className="text-2xl font-bold text-foreground dark:text-slate-100" numberOfLines={1}>
-              {title}
-            </Text>
+          <View className="min-w-0 flex-1 gap-1">
+            {renaming ? (
+              <View className="flex-row items-center gap-2">
+                <TextInput
+                  accessibilityLabel="Thread title"
+                  autoFocus
+                  className="min-w-0 flex-1 rounded-md border border-input bg-card px-3 text-lg font-semibold text-foreground dark:border-neutral-800 dark:bg-black dark:text-slate-100"
+                  editable={!renameSaving}
+                  maxLength={120}
+                  onChangeText={setRenameDraft}
+                  onSubmitEditing={() => {
+                    void saveRename();
+                  }}
+                  placeholder="Thread title"
+                  placeholderTextColor={colors.muted}
+                  returnKeyType="done"
+                  selectionColor={colors.primary}
+                  style={{ height: 44, lineHeight: 22, paddingBottom: 0, paddingTop: 0, textAlignVertical: "center" }}
+                  value={renameDraft}
+                />
+                <Pressable accessibilityRole="button" accessibilityLabel="Save thread title" className="size-10 items-center justify-center rounded-full bg-primary" disabled={renameSaving} onPress={() => void saveRename()}>
+                  {renameSaving ? <ActivityIndicator color={colors.primaryForeground} /> : <Check color={colors.primaryForeground} size={18} />}
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Cancel rename" className="size-10 items-center justify-center rounded-full border border-border bg-card dark:border-neutral-800 dark:bg-black" disabled={renameSaving} onPress={cancelRename}>
+                  <X color={colors.foreground} size={18} />
+                </Pressable>
+              </View>
+            ) : (
+              <View className="flex-row items-center gap-2">
+                <Text className="min-w-0 flex-1 text-2xl font-bold text-foreground dark:text-slate-100" numberOfLines={1}>
+                  {title}
+                </Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Rename thread" className="size-9 items-center justify-center rounded-full bg-muted dark:bg-slate-800" onPress={startRename}>
+                  <Pencil color={colors.muted} size={16} />
+                </Pressable>
+              </View>
+            )}
             <Text className="text-sm text-muted-foreground dark:text-slate-400">{isStreaming ? "Nexus is responding" : "Nexus AI"}</Text>
           </View>
         </View>
@@ -164,37 +256,44 @@ export default function AiChatThreadScreen() {
           ) : null}
         </View>
 
-        <ScrollView
-          ref={scrollRef}
+        <FlatList
+          ref={listRef}
           className="flex-1"
-          contentContainerClassName="gap-3 px-4 pb-4 pt-2"
+          contentContainerStyle={{ gap: 12, paddingBottom: Math.max(16, composerHeight + 16), paddingHorizontal: 16, paddingTop: 8 }}
+          data={timelineItems}
+          keyExtractor={timelineKey}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
-        >
-          {isLoading ? (
-            <View className="flex-row items-center gap-2 py-2">
-              <ActivityIndicator color={colors.icon} />
-              <Text className="text-sm text-muted-foreground dark:text-slate-400">Loading messages</Text>
-            </View>
-          ) : null}
-
-          {!isLoading && !messages.length ? (
-            <View className="items-center gap-2 rounded-md border border-dashed border-border bg-card p-6 dark:border-neutral-800 dark:bg-black">
-              <Bot color={colors.muted} size={24} />
-              <Text className="text-sm font-medium text-foreground dark:text-slate-100">Start the conversation</Text>
-              <Text className="text-center text-sm text-muted-foreground dark:text-slate-400">
-                Ask Nexus for a focused answer, plan, or operational summary.
-              </Text>
-            </View>
-          ) : null}
-
-          {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
-          ))}
-        </ScrollView>
+          ListEmptyComponent={<ChatEmptyState colors={colors} isLoading={isLoading} />}
+          onContentSizeChange={() => {
+            if (stickToBottomRef.current || isStreaming) {
+              requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+            }
+          }}
+          onLayout={() => {
+            if (stickToBottomRef.current) {
+              requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+            }
+          }}
+          onScroll={handleTranscriptScroll(stickToBottomRef)}
+          renderItem={({ item }) =>
+            item.kind === "message" ? (
+              <MessageBubble
+                bubbleMaxWidth={Math.max(220, Math.min(560, windowWidth - 32) * 0.92)}
+                message={item.message}
+                onCopy={() => void Clipboard.setStringAsync(item.message.content)}
+                onRetry={() => void retryFromMessage(item.message)}
+              />
+            ) : (
+              <TimelineEventCard timelineEvent={item.event} />
+            )
+          }
+          scrollEventThrottle={80}
+        />
 
         <View
           className="border-t border-border bg-background px-4 pt-3 dark:border-neutral-800 dark:bg-black"
+          onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
           style={{ paddingBottom: composerBottomPadding }}
         >
           {sendError || aiChat.error ? <Text className="mb-2 text-sm text-red-600 dark:text-red-400">{sendError ?? aiChat.error}</Text> : null}
@@ -336,29 +435,167 @@ function formatFileSize(size?: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function MessageBubble({ message }: { message: AiChatMessage }) {
+type TimelineItem = { kind: "message"; message: AiChatMessage } | { kind: "event"; event: AiChatTimelineEvent };
+
+type TranscriptScrollRef = {
+  current: boolean;
+};
+
+function buildTimeline(messages: AiChatMessage[], timelineEvents: AiChatTimelineEvent[]): TimelineItem[] {
+  return [
+    ...messages.map((message): TimelineItem => ({ kind: "message", message })),
+    ...timelineEvents.map((event): TimelineItem => ({ kind: "event", event }))
+  ].sort((a, b) => new Date(itemTime(a)).getTime() - new Date(itemTime(b)).getTime());
+}
+
+function itemTime(item: TimelineItem) {
+  return item.kind === "message" ? item.message.createdAt : item.event.createdAt;
+}
+
+function timelineKey(item: TimelineItem) {
+  return item.kind === "message" ? `message-${item.message.id}` : `event-${item.event.id}`;
+}
+
+function handleTranscriptScroll(stickToBottomRef: TranscriptScrollRef) {
+  return (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    stickToBottomRef.current = contentSize.height - (contentOffset.y + layoutMeasurement.height) < 96;
+  };
+}
+
+function ChatEmptyState({ colors, isLoading }: { colors: ReturnType<typeof useTheme>["colors"]; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <View className="flex-row items-center gap-2 py-2">
+        <ActivityIndicator color={colors.icon} />
+        <Text className="text-sm text-muted-foreground dark:text-slate-400">Loading messages</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className="items-center gap-2 rounded-md border border-dashed border-border bg-card p-6 dark:border-neutral-800 dark:bg-black">
+      <Bot color={colors.muted} size={24} />
+      <Text className="text-sm font-medium text-foreground dark:text-slate-100">Start the conversation</Text>
+      <Text className="text-center text-sm text-muted-foreground dark:text-slate-400">
+        Ask Nexus for a focused answer, plan, or operational summary.
+      </Text>
+    </View>
+  );
+}
+
+function TimelineEventCard({ timelineEvent }: { timelineEvent: AiChatTimelineEvent }) {
+  const event = timelineEvent.event;
+  if (event.type === "status") {
+    return <StatusCard event={event} />;
+  }
+  if (event.type === "tool_call") {
+    return <ToolCallCard toolCall={event.toolCall} />;
+  }
+  if (event.type === "tool_result") {
+    return <ToolResultCard result={event.result} />;
+  }
+  if (event.type === "confirmation_request") {
+    return <ConfirmationCard confirmation={event.confirmation} />;
+  }
+  if (event.type === "error") {
+    return <ErrorCard message={event.message} />;
+  }
+  if (event.type === "usage") {
+    return null;
+  }
+  return null;
+}
+
+function MessageBubble({
+  bubbleMaxWidth,
+  message,
+  onCopy,
+  onRetry
+}: {
+  bubbleMaxWidth: number;
+  message: AiChatMessage;
+  onCopy: () => void;
+  onRetry: () => void;
+}) {
   const isUser = message.role === "user";
   const isPending = message.status === "sending" || message.status === "streaming";
   const isError = message.status === "error";
+  const isAssistant = message.role === "assistant";
 
   return (
-    <View className={cn("max-w-[86%] gap-1", isUser ? "self-end items-end" : "self-start items-start")}>
+    <View className={cn("gap-1", isUser ? "self-end items-end" : "self-start items-start")} style={{ maxWidth: bubbleMaxWidth }}>
       <View
         className={cn(
           "rounded-lg border px-3 py-2",
           isUser ? "border-primary bg-primary" : "border-border bg-card dark:border-neutral-800 dark:bg-black",
           isError && "border-red-500"
         )}
+        style={{ maxWidth: bubbleMaxWidth, overflow: "hidden" }}
       >
-        <Text className={cn("text-base leading-6", isUser ? "text-primary-foreground" : "text-foreground dark:text-slate-100")}>
-          {message.content || (isPending ? "Thinking..." : "")}
-        </Text>
+        {message.content ? (
+          <MessageRenderer inverse={isUser} markdown={message.content} />
+        ) : (
+          <TypingDots inverse={isUser} />
+        )}
       </View>
+      {isAssistant && message.content ? (
+        <View className="flex-row gap-2">
+          <MessageActionButton icon="copy" label="Copy response" onPress={onCopy} />
+          {(isError || !isPending) && <MessageActionButton icon="retry" label="Retry response" onPress={onRetry} />}
+        </View>
+      ) : null}
       {isPending || isError ? (
         <Text className={cn("text-xs", isError ? "text-red-600 dark:text-red-400" : "text-muted-foreground dark:text-slate-400")}>
-          {isError ? "Not delivered" : message.status === "streaming" ? "Streaming" : "Sending"}
+          {isError ? "Not delivered" : message.status === "streaming" ? "Nexus is responding" : "Sending"}
         </Text>
       ) : null}
+    </View>
+  );
+}
+
+function TypingDots({ inverse }: { inverse: boolean }) {
+  const { colors } = useTheme();
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true
+      })
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [progress]);
+
+  const dotColor = inverse ? colors.primaryForeground : colors.muted;
+
+  return (
+    <View className="h-6 flex-row items-center gap-1 px-1">
+      {[0, 1, 2].map((index) => {
+        const translateY = progress.interpolate({
+          inputRange: [0, 0.33, 0.66, 1],
+          outputRange: index === 0 ? [-3, 0, 0, -3] : index === 1 ? [0, -3, 0, 0] : [0, 0, -3, 0]
+        });
+        const opacity = progress.interpolate({
+          inputRange: [0, 0.33, 0.66, 1],
+          outputRange: index === 0 ? [1, 0.35, 0.35, 1] : index === 1 ? [0.35, 1, 0.35, 0.35] : [0.35, 0.35, 1, 0.35]
+        });
+        return (
+          <Animated.View
+            key={index}
+            className="size-1.5 rounded-full"
+            style={{
+              backgroundColor: dotColor,
+              opacity,
+              transform: [{ translateY }]
+            }}
+          />
+        );
+      })}
     </View>
   );
 }

@@ -82,6 +82,8 @@ export type RootsEvent = {
 };
 
 export type AiChatRole = "user" | "assistant" | "system";
+export type AiToolLifecycleStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled" | "waiting_confirmation";
+export type AiToolRisk = "low" | "medium" | "high";
 
 export type AiChatThread = {
   id: string;
@@ -109,10 +111,79 @@ export type AiChatMessage = {
   status?: "sending" | "streaming" | "sent" | "error";
 };
 
+export type AiChatStatusEvent = {
+  type: "status";
+  status: AiToolLifecycleStatus | "thinking" | "working" | "completed";
+  title?: string;
+  message?: string;
+};
+
+export type AiChatToolCall = {
+  id: string;
+  name: string;
+  title?: string;
+  status: AiToolLifecycleStatus;
+  risk?: AiToolRisk;
+  summary?: string;
+  input?: unknown;
+  startedAt?: string;
+};
+
+export type AiChatToolResult = {
+  toolCallId: string;
+  status: AiToolLifecycleStatus;
+  summary?: string;
+  details?: unknown;
+  completedAt?: string;
+};
+
+export type AiChatConfirmationRequest = {
+  id: string;
+  toolCallId?: string;
+  title: string;
+  body: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  expiresAt?: string;
+};
+
+export type AiChatConfirmationResponse = {
+  id: string;
+  accepted: boolean;
+  respondedAt?: string;
+};
+
+export type AiChatUsage = {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+};
+
+export type AiChatTimelineEvent = {
+  id: string;
+  threadId: string;
+  createdAt: string;
+  event:
+    | AiChatStatusEvent
+    | { type: "tool_call"; toolCall: AiChatToolCall }
+    | { type: "tool_result"; result: AiChatToolResult }
+    | { type: "confirmation_request"; confirmation: AiChatConfirmationRequest }
+    | { type: "confirmation_response"; response: AiChatConfirmationResponse }
+    | { type: "usage"; usage: AiChatUsage }
+    | { type: "error"; message: string };
+};
+
 export type AiChatStreamEvent =
   | { type: "thread"; thread: AiChatThread }
   | { type: "message"; message: AiChatMessage }
   | { type: "delta"; delta: string }
+  | AiChatStatusEvent
+  | { type: "tool_call"; toolCall: AiChatToolCall }
+  | { type: "tool_result"; result: AiChatToolResult }
+  | { type: "confirmation_request"; confirmation: AiChatConfirmationRequest }
+  | { type: "confirmation_response"; response: AiChatConfirmationResponse }
+  | { type: "usage"; usage: AiChatUsage }
   | { type: "done" }
   | { type: "error"; message: string };
 

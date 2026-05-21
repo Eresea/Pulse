@@ -1,5 +1,7 @@
 import { appConfig } from "@/config/app-config";
 import { aiDebugLog } from "@/services/ai-debug-log";
+import { mapMessage, mapThread, parseAiStreamChunk, parseAiStreamPayload } from "@/services/ai-stream-parser";
+import { normalizeAiThreadTitle } from "@/services/ai-thread-title";
 import { rootsApi } from "@/services/roots-api";
 import { tokenStore } from "@/services/token-store";
 import type { AiChatMessage, AiChatModel, AiChatRole, AiChatStreamEvent, AiChatThread } from "@/services/types";
@@ -41,36 +43,6 @@ type RawModel = Partial<AiChatModel> & {
   defaultModel?: boolean;
 };
 
-function mapThread(thread: RawThread): AiChatThread {
-  const id = thread.id ?? thread.threadId ?? "";
-  return {
-    id,
-    title: thread.title ?? thread.name ?? "New chat",
-    preview: thread.preview ?? thread.lastMessagePreview ?? thread.lastMessage,
-    lastActivityAt: thread.lastActivityAt ?? thread.updatedAt ?? thread.createdAt,
-    unreadCount: thread.unreadCount,
-    status: thread.status
-  };
-}
-
-function mapMessage(message: RawMessage): AiChatMessage {
-  return {
-    id: message.id ?? message.messageId ?? `message-${Date.now()}`,
-    threadId: message.threadId ?? "",
-    role: normalizeRole(message.role),
-    content: message.content ?? message.text ?? "",
-    createdAt: message.createdAt ?? message.sentAt ?? new Date().toISOString(),
-    status: message.status
-  };
-}
-
-function normalizeRole(role: RawMessage["role"]): AiChatRole {
-  if (role === "user" || role === "assistant" || role === "system") {
-    return role;
-  }
-  return "assistant";
-}
-
 function normalizeMessageList(result: unknown, threadId: string): AiChatMessage[] {
   const source = Array.isArray(result) ? result : Array.isArray((result as { messages?: unknown[] })?.messages) ? (result as { messages: unknown[] }).messages : [];
   return source.map((item) => ({ ...mapMessage(item as RawMessage), threadId }));
@@ -97,87 +69,7 @@ function normalizeModelList(result: unknown): AiChatModel[] {
     .filter((model) => model.id);
 }
 
-export function parseAiStreamPayload(payload: string, eventType?: string): AiChatStreamEvent | null {
-  if (!payload.trim() || payload === "[DONE]") {
-    return payload === "[DONE]" ? { type: "done" } : null;
-  }
-
-  try {
-    const event = JSON.parse(payload) as Omit<Partial<AiChatStreamEvent>, "type"> & {
-      type?: string;
-      delta?: string;
-      text?: string;
-      content?: string;
-      output_text?: string;
-      error?: { message?: string } | string;
-      thread?: RawThread;
-      message?: RawMessage;
-    };
-    const type = event.type ?? eventType;
-
-    const choiceDelta = (event as { choices?: { delta?: { content?: string }; text?: string }[] }).choices?.[0];
-    if (choiceDelta?.delta?.content || choiceDelta?.text) {
-      return { type: "delta", delta: choiceDelta.delta?.content ?? choiceDelta.text ?? "" };
-    }
-    if (type === "thread" && event.thread) {
-      return { type: "thread", thread: mapThread(event.thread) };
-    }
-    if (type === "message" && event.message) {
-      return { type: "message", message: mapMessage(event.message) };
-    }
-    if (type === "delta" || type === "response.output_text.delta" || type === "response.text.delta") {
-      return { type: "delta", delta: event.delta ?? event.text ?? event.content ?? event.output_text ?? "" };
-    }
-    if (type === "done" || type === "response.completed" || type === "response.done") {
-      return { type: "done" };
-    }
-    if (type === "error" || type === "response.failed") {
-      const message = typeof event.error === "string" ? event.error : event.error?.message ?? event.content ?? event.text;
-      return { type: "error", message: formatStreamErrorCode(message) ?? "Nexus AI request failed." };
-    }
-    if (event.delta || event.text || event.content || event.output_text) {
-      return { type: "delta", delta: event.delta ?? event.text ?? event.content ?? event.output_text ?? "" };
-    }
-    if (event.thread) {
-      return { type: "thread", thread: mapThread(event.thread) };
-    }
-    if (event.message) {
-      return { type: "message", message: mapMessage(event.message) };
-    }
-  } catch {
-    return { type: "delta", delta: payload };
-  }
-
-  return null;
-}
-
-function formatStreamErrorCode(code?: string) {
-  switch (code) {
-    case "invalid_request":
-      return "Nexus rejected the AI request.";
-    case "not_found":
-      return "The selected Nexus AI model was not found.";
-    case "openrouter_not_configured":
-      return "Nexus AI is not configured.";
-    case "openrouter_upstream_error":
-      return "Nexus AI provider returned an error.";
-    case "openrouter_empty_response":
-      return "Nexus AI provider returned an empty response.";
-    case "internal_error":
-      return "Nexus returned an internal error.";
-    default:
-      return code;
-  }
-}
-
-export function parseAiStreamChunk(chunk: string, remainder: string) {
-  const combined = remainder + chunk;
-  const lines = combined.split(/\r?\n/);
-  return {
-    lines: lines.slice(0, -1),
-    remainder: lines.at(-1) ?? ""
-  };
-}
+export { parseAiStreamChunk, parseAiStreamPayload };
 
 function logStreamEvent(event: AiChatStreamEvent, traceId: string | undefined, modelId: string, final = false) {
   aiDebugLog.add({
@@ -239,6 +131,17 @@ export const aiChatService = {
     return mapThread(await rootsApi.request(appConfig.ai.threads, {
       method: "POST",
       body: JSON.stringify({ title: "New chat" })
+    }));
+  },
+
+  async renameThread(threadId: string, title: string): Promise<AiChatThread> {
+    const normalizedTitle = normalizeAiThreadTitle(title);
+    if (!normalizedTitle) {
+      throw new Error("Thread title cannot be empty.");
+    }
+    return mapThread(await rootsApi.request(appConfig.ai.thread(threadId), {
+      method: "PATCH",
+      body: JSON.stringify({ title: normalizedTitle })
     }));
   },
 
