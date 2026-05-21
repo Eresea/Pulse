@@ -60,7 +60,7 @@ export const pushService = {
       deviceId: androidId ?? fallbackDeviceId,
       fcmToken,
       platform: Platform.OS === "android" || Platform.OS === "ios" || Platform.OS === "web" ? Platform.OS : "unknown",
-      userAgent: `${Device.manufacturer ?? "Unknown"} ${Device.modelName ?? "device"} / Pulse ${Application.nativeApplicationVersion ?? "0.1.1"}`
+      userAgent: `${Device.manufacturer ?? "Unknown"} ${Device.modelName ?? "device"} / Pulse ${Application.nativeApplicationVersion ?? "0.1.2"}`
     };
   }
 };
