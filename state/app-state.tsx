@@ -28,6 +28,9 @@ type AppState = {
   };
   updates: {
     status: string;
+    version?: string;
+    url?: string;
+    notes?: string;
   };
   aiChat: {
     models: AiChatModel[];
@@ -47,6 +50,7 @@ type AppState = {
   actions: {
     bootstrap: () => void;
     checkForUpdates: () => void;
+    openUpdate: () => Promise<void>;
     clearAiDebugLogs: () => void;
     completeLogin: (accessToken: string, refreshToken?: string) => Promise<void>;
     createAiThread: () => Promise<AiChatThread>;
@@ -73,6 +77,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [pushPermission, setPushPermission] = useState("not requested");
   const [pollingStatus, setPollingStatus] = useState<"idle" | "running" | "disabled" | "error">("idle");
   const [updateStatus, setUpdateStatus] = useState("idle");
+  const [availableUpdate, setAvailableUpdate] = useState<{ version?: string; url?: string; notes?: string } | undefined>();
   const [user, setUser] = useState<UserInfo | undefined>();
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [aiModels, setAiModels] = useState<AiChatModel[]>([]);
@@ -101,8 +106,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     autoUpdateStarted.current = true;
     setUpdateStatus("checking");
     void updateService
-      .checkFetchAndReload()
-      .then((result) => setUpdateStatus(result.status))
+      .checkForApkUpdate()
+      .then((result) => {
+        setUpdateStatus(result.status);
+        setAvailableUpdate(result.available ? { version: result.version, url: result.url, notes: result.notes } : undefined);
+      })
       .catch(() => setUpdateStatus("error"));
   }, []);
 
@@ -292,7 +300,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         status: pollingStatus
       },
       updates: {
-        status: updateStatus
+        status: updateStatus,
+        version: availableUpdate?.version,
+        url: availableUpdate?.url,
+        notes: availableUpdate?.notes
       },
       aiChat: {
         models: aiModels,
@@ -318,9 +329,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         checkForUpdates: () => {
           setUpdateStatus("checking");
           void updateService
-            .checkFetchAndMaybeReload(true)
-            .then((result) => setUpdateStatus(result.status))
+            .checkForApkUpdate()
+            .then((result) => {
+              setUpdateStatus(result.status);
+              setAvailableUpdate(result.available ? { version: result.version, url: result.url, notes: result.notes } : undefined);
+            })
             .catch(() => setUpdateStatus("error"));
+        },
+        openUpdate: async () => {
+          if (!availableUpdate?.url) {
+            return;
+          }
+          await updateService.openUpdate(availableUpdate.url);
         },
         clearAiDebugLogs: () => {
           aiDebugLog.clear();
@@ -553,7 +573,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     // Action closures intentionally capture the current state snapshot used by optimistic UI updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, aiTimelineEventsByThread, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
+    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, aiTimelineEventsByThread, availableUpdate, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

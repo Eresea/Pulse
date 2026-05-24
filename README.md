@@ -11,7 +11,7 @@ The first version is an app shell: it establishes the project structure, native 
 - NativeWind and shadcn-style local components inspired by React Native Reusables
 - React Native Firebase Messaging for Android FCM
 - `expo-secure-store` for access token persistence
-- `expo-updates` configured for Nexus-hosted OTA manifests and assets
+- Nexus APK update checks for full Android app updates
 
 ## Development
 
@@ -95,26 +95,17 @@ Current shell behavior:
 - Inbox defines the event landing zone for chat, Bellum, and push events.
 - Settings exposes API, update URL, runtime, and service status.
 
-## Self-Hosted Updates
+## APK Updates
 
-Pulse uses `expo-updates` with a Nexus-hosted update URL:
+Pulse checks Nexus for full Android APK updates:
 
 ```text
-https://nexus.eresea.net/api/mobile-updates/pulse
+GET /api/v1/updates/check?appId=pulse&platform=android&channel=production&currentVersion=...
 ```
 
-Native changes still require a new Android build. JavaScript and asset-only changes can be exported and published to the Nexus update infrastructure. On app startup, Pulse checks for an available compatible update, fetches it, and reloads into it automatically.
-
-Export an Android update bundle:
-
-```powershell
-node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" run updates:export
-```
-
-The Roots backend must serve Expo update manifests and assets compatible with the runtime version policy in `app.json`.
+Nexus returns `204 No Content` when the installed APK is current. When a newer APK is available, Settings shows the returned version and exposes an action to open the update URL externally. Pulse does not install APKs silently.
 
 ## Release Policy
 
-- Native dependency changes, app config changes, permissions, and Firebase config changes require a new Android build.
-- JavaScript, styling, and bundled asset changes can be shipped through self-hosted `expo-updates` when the runtime version is compatible.
+- Native dependency changes, app config changes, permissions, Firebase config changes, JavaScript changes, styling, and bundled asset changes require a new Android APK build.
 - Production update publishing should be channel-aware; the default channel in this scaffold is `production`.

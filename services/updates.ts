@@ -1,46 +1,40 @@
-import * as Updates from "expo-updates";
+import * as Application from "expo-application";
+import Constants from "expo-constants";
+import { Linking, Platform } from "react-native";
+import { appConfig } from "@/config/app-config";
+import { buildApkUpdateCheckPath, parseApkUpdateResponse, type ApkUpdateResult } from "@/services/update-check";
 
-type UpdateResult = {
-  status: "development" | "checking" | "current" | "downloading" | "ready-to-reload" | "reloading";
-  applied: boolean;
+type UpdateResult = ApkUpdateResult | {
+  status: "checking";
+  available: false;
 };
 
 export const updateService = {
-  async checkAndFetch(): Promise<UpdateResult> {
-    if (__DEV__) {
-      return { status: "development", applied: false };
-    }
+  async checkForApkUpdate(): Promise<UpdateResult> {
+    const currentVersion = Constants.expoConfig?.version ?? Application.nativeApplicationVersion ?? "0.0.0";
+    const deviceId = Platform.OS === "android" ? Application.getAndroidId() : undefined;
+    const path = buildApkUpdateCheckPath({
+      appId: "pulse",
+      platform: appConfig.updatePlatform,
+      channel: appConfig.updateChannel,
+      currentVersion,
+      deviceId
+    });
 
-    const result = await Updates.checkForUpdateAsync();
-    if (!result.isAvailable) {
-      return { status: "current", applied: false };
-    }
+    const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
+      headers: {
+        Accept: "application/json"
+      }
+    });
 
-    await Updates.fetchUpdateAsync();
-    return { status: "ready-to-reload", applied: false };
+    return parseApkUpdateResponse(response);
   },
 
-  async checkFetchAndMaybeReload(reload: boolean): Promise<UpdateResult> {
-    const result = await this.checkAndFetch();
-    if (!reload || result.status !== "ready-to-reload") {
-      return result;
+  async openUpdate(url: string) {
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) {
+      throw new Error("Android cannot open the update URL.");
     }
-
-    await Updates.reloadAsync();
-    return { status: "reloading", applied: true };
-  },
-
-  async checkFetchAndReload(): Promise<UpdateResult> {
-    const result = await this.checkAndFetch();
-    if (result.status !== "ready-to-reload") {
-      return result;
-    }
-
-    await Updates.reloadAsync();
-    return { status: "reloading", applied: true };
-  },
-
-  async reload() {
-    await Updates.reloadAsync();
+    await Linking.openURL(url);
   }
 };

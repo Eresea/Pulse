@@ -56,8 +56,9 @@ export default function SettingsScreen() {
           </CardHeader>
           <CardContent className="gap-2">
             <SettingRow label="API" value={appConfig.apiBaseUrl} />
-            <SettingRow label="Update URL" value={appConfig.updateUrl} />
+            <SettingRow label="Update URL" value={`${appConfig.apiBaseUrl}${appConfig.updatePath}`} />
             <SettingRow label="Update channel" value={appConfig.updateChannel} />
+            <SettingRow label="Update platform" value={appConfig.updatePlatform} />
             <SettingRow label="Runtime" value={typeof runtimeVersion === "string" ? runtimeVersion : "appVersion"} />
           </CardContent>
         </Card>
@@ -74,12 +75,24 @@ export default function SettingsScreen() {
             <SettingRow label="FCM permission" value={push.permissionStatus} />
             <SettingRow label="Polling" value={polling.status} />
             <SettingRow label="Updates" value={updates.status} />
+            {updates.version ? <SettingRow label="Available version" value={updates.version} /> : null}
+            {updates.notes ? <SettingRow label="Release notes" value={updates.notes} /> : null}
             <Button onPress={() => router.push("/(tabs)/settings/ai-diagnostics" as Href)} variant="outline">
               AI Diagnostics
             </Button>
             <Button onPress={actions.checkForUpdates} variant="outline">
               Check for Updates
             </Button>
+            {updates.url ? (
+              <Button
+                onPress={() => {
+                  void actions.openUpdate();
+                }}
+                variant="default"
+              >
+                Open Update
+              </Button>
+            ) : null}
             <Button
               onPress={() => {
                 void actions.signOut().then(() => router.replace("/login"));

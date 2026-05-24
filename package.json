@@ -10,7 +10,6 @@
     "prebuild:android": "expo prebuild --platform android",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
-    "updates:export": "expo export --platform android --output-dir dist",
     "updates:check": "node scripts/verify-update-config.mjs",
     "ios": "expo run:ios",
     "test:ai-chat": "tsx services/ai-chat.test.ts",

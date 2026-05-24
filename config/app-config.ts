@@ -10,8 +10,9 @@ const roots = (Constants.expoConfig?.extra?.roots ?? {}) as RootsExtra;
 
 export const appConfig = {
   apiBaseUrl: roots.apiBaseUrl ?? "https://nexus.eresea.net",
-  updateUrl: Constants.expoConfig?.updates?.url ?? "https://nexus.eresea.net/api/mobile-updates/pulse",
+  updatePath: "/api/v1/updates/check",
   updateChannel: roots.updateChannel ?? "production",
+  updatePlatform: "android",
   pollingIntervalMs: roots.pollingIntervalMs ?? 30000,
   realtime: {
     userSocket: "/ws/v1/user"
