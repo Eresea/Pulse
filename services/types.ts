@@ -9,13 +9,65 @@ export type UserInfo = {
   avatarUrl?: string;
   emailVerified?: boolean;
   providers: ConnectedProvider[];
+  permissions: UserPermission[];
 };
+
+export type ConnectorStatus =
+  | "connected"
+  | "disconnected"
+  | "degraded"
+  | "error"
+  | "pending"
+  | "expired"
+  | "needsReauth"
+  | "locallyAvailable"
+  | "remoteOnly"
+  | "unsupported"
+  | "unknown";
 
 export type ConnectedProvider = {
   id: string;
   name: string;
   email?: string;
   connectedAt?: string;
+  status: ConnectorStatus;
+  permissions: UserPermission[];
+};
+
+export type UserPermission = {
+  id: string;
+  name: string;
+  description?: string;
+  granted?: boolean;
+};
+
+export type ConnectorActionState = {
+  canConnect: boolean;
+  canDisconnect: boolean;
+  canRefresh: boolean;
+  canReauth: boolean;
+};
+
+export type ConnectorCatalogItem = {
+  id: string;
+  displayName: string;
+  providerType?: string;
+  authMethod?: string;
+  capabilities: string[];
+  supportedApps: string[];
+  supportedModules: string[];
+  supportMode?: string;
+  status: ConnectorStatus;
+  rawStatus?: string;
+  statusMessage?: string;
+  accountEmail?: string;
+  accountName?: string;
+  connectedAt?: string;
+  updatedAt?: string;
+  expiresAt?: string;
+  localAvailable: boolean;
+  actions: ConnectorActionState;
+  actionUrl?: string;
 };
 
 export type LoginEmailRequest = {
@@ -52,8 +104,11 @@ export type NexusUser = {
   imageUrl?: string;
   emailVerified?: boolean;
   connectedProviders?: NexusProvider[];
+  connectors?: NexusProvider[];
   providers?: NexusProvider[];
   externalLogins?: NexusProvider[];
+  permissions?: NexusPermission[];
+  scopes?: NexusPermission[];
 };
 
 export type NexusProvider = {
@@ -64,7 +119,77 @@ export type NexusProvider = {
   displayName?: string;
   email?: string;
   connectedAt?: string;
+  status?: string;
+  state?: string;
+  isConnected?: boolean;
+  connected?: boolean;
+  permissions?: NexusPermission[];
+  scopes?: NexusPermission[];
 };
+
+export type NexusConnector = {
+  id?: string;
+  connectorId?: string;
+  connector_id?: string;
+  key?: string;
+  name?: string;
+  displayName?: string;
+  display_name?: string;
+  providerType?: string;
+  provider_type?: string;
+  authMethod?: string;
+  auth_method?: string;
+  capabilities?: string[];
+  supportedApps?: string[];
+  supported_apps?: string[];
+  supportedModules?: string[];
+  supported_modules?: string[];
+  mode?: string;
+  supportMode?: string;
+  support_mode?: string;
+  status?: string;
+  statusMessage?: string;
+  status_message?: string;
+  error?: string;
+  accountEmail?: string;
+  account_email?: string;
+  accountName?: string;
+  account_name?: string;
+  connectedAt?: string;
+  connected_at?: string;
+  updatedAt?: string;
+  updated_at?: string;
+  expiresAt?: string;
+  expires_at?: string;
+  localAvailable?: boolean;
+  local_available?: boolean;
+  canConnect?: boolean;
+  can_connect?: boolean;
+  canDisconnect?: boolean;
+  can_disconnect?: boolean;
+  canRefresh?: boolean;
+  can_refresh?: boolean;
+  canReauth?: boolean;
+  can_reauth?: boolean;
+  actionUrl?: string;
+  action_url?: string;
+};
+
+export type NexusConnectorListResponse = NexusConnector[] | { connectors?: NexusConnector[] };
+
+export type NexusPermission =
+  | string
+  | {
+      id?: string;
+      key?: string;
+      scope?: string;
+      name?: string;
+      displayName?: string;
+      description?: string;
+      granted?: boolean;
+      enabled?: boolean;
+      allowed?: boolean;
+    };
 
 export type DeviceInfo = {
   deviceId: string;

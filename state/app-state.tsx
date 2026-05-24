@@ -7,7 +7,7 @@ import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
 import { realtimeService } from "@/services/realtime";
 import { updateService } from "@/services/updates";
-import type { AiChatMessage, AiChatModel, AiChatThread, AiChatTimelineEvent, AiDebugLogEntry, ServiceStatus, UserInfo } from "@/services/types";
+import type { AiChatMessage, AiChatModel, AiChatThread, AiChatTimelineEvent, AiDebugLogEntry, ConnectorCatalogItem, ServiceStatus, UserInfo } from "@/services/types";
 
 type AppState = {
   session: {
@@ -22,6 +22,11 @@ type AppState = {
   push: {
     token?: string;
     permissionStatus: string;
+  };
+  connectors: {
+    items: ConnectorCatalogItem[];
+    isLoading: boolean;
+    error?: string;
   };
   polling: {
     status: "idle" | "running" | "disabled" | "error";
@@ -59,6 +64,7 @@ type AppState = {
     loadAiThreads: () => Promise<AiChatThread[]>;
     loginEmail: (email: string, password: string) => Promise<void>;
     prefetchUser: () => Promise<UserInfo | undefined>;
+    refreshConnectors: () => Promise<ConnectorCatalogItem[]>;
     refreshUser: () => Promise<UserInfo>;
     registerEmail: (email: string, password: string, displayName: string) => Promise<void>;
     selectAiModel: (modelId: string) => void;
@@ -75,6 +81,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [realtimeDetail, setRealtimeDetail] = useState<string | undefined>();
   const [pushToken, setPushToken] = useState<string | undefined>();
   const [pushPermission, setPushPermission] = useState("not requested");
+  const [connectors, setConnectors] = useState<ConnectorCatalogItem[]>([]);
+  const [connectorsLoading, setConnectorsLoading] = useState(false);
+  const [connectorsError, setConnectorsError] = useState<string | undefined>();
   const [pollingStatus, setPollingStatus] = useState<"idle" | "running" | "disabled" | "error">("idle");
   const [updateStatus, setUpdateStatus] = useState("idle");
   const [availableUpdate, setAvailableUpdate] = useState<{ version?: string; url?: string; notes?: string } | undefined>();
@@ -92,6 +101,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [aiChatError, setAiChatError] = useState<string | undefined>();
   const [aiDebugLogs, setAiDebugLogs] = useState<AiDebugLogEntry[]>([]);
   const userRefreshPromise = useRef<Promise<UserInfo> | null>(null);
+  const connectorsRefreshPromise = useRef<Promise<ConnectorCatalogItem[]> | null>(null);
   const aiModelsPromise = useRef<Promise<AiChatModel[]> | null>(null);
   const aiThreadsPromise = useRef<Promise<AiChatThread[]> | null>(null);
   const autoUpdateStarted = useRef(false);
@@ -217,6 +227,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setPollingStatus(pollingService.start() ? "running" : "disabled");
     void loadAiModelsAction().catch(() => undefined);
     void loadAiThreadsAction().catch(() => undefined);
+    void refreshConnectorsAction().catch(() => undefined);
   };
 
   const clearAiState = () => {
@@ -228,6 +239,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setAiChatError(undefined);
     aiModelsPromise.current = null;
     aiThreadsPromise.current = null;
+  };
+
+  const refreshConnectorsAction = async () => {
+    if (!connectorsRefreshPromise.current) {
+      setConnectorsLoading(true);
+      setConnectorsError(undefined);
+      connectorsRefreshPromise.current = authService
+        .listConnectors()
+        .then((nextConnectors) => {
+          setConnectors(nextConnectors);
+          return nextConnectors;
+        })
+        .catch((err) => {
+          setConnectorsError(err instanceof Error ? err.message : "Could not load Nexus connectors.");
+          throw err;
+        })
+        .finally(() => {
+          connectorsRefreshPromise.current = null;
+          setConnectorsLoading(false);
+        });
+    }
+
+    return connectorsRefreshPromise.current;
   };
 
   const loadAiModelsAction = async () => {
@@ -295,6 +329,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       push: {
         token: pushToken,
         permissionStatus: pushPermission
+      },
+      connectors: {
+        items: connectors,
+        isLoading: connectorsLoading,
+        error: connectorsError
       },
       polling: {
         status: pollingStatus
@@ -398,6 +437,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           }
 
           return userRefreshPromise.current;
+        },
+        refreshConnectors: async () => {
+          return refreshConnectorsAction();
         },
         refreshUser: async () => {
           if (!userRefreshPromise.current) {
@@ -566,6 +608,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           setUser(undefined);
           setPushToken(undefined);
           setPushPermission("not requested");
+          setConnectors([]);
+          setConnectorsError(undefined);
+          connectorsRefreshPromise.current = null;
           setPollingStatus("idle");
           clearAiState();
         }
@@ -573,7 +618,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     // Action closures intentionally capture the current state snapshot used by optimistic UI updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, aiTimelineEventsByThread, availableUpdate, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
+    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, aiTimelineEventsByThread, availableUpdate, connectors, connectorsError, connectorsLoading, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

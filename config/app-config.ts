@@ -25,6 +25,7 @@ export const appConfig = {
     refresh: "/api/v1/auth/token/refresh",
     logout: "/api/v1/auth/logout",
     me: "/api/v1/me",
+    connectors: "/api/v1/connectors?appId=pulse",
     device: (userId: string) => `/api/v1/auth/user/${userId}/device`
   },
   ai: {

@@ -93,14 +93,6 @@ export default function SettingsScreen() {
                 Open Update
               </Button>
             ) : null}
-            <Button
-              onPress={() => {
-                void actions.signOut().then(() => router.replace("/login"));
-              }}
-              variant="ghost"
-            >
-              Sign Out
-            </Button>
           </CardContent>
         </Card>
       </ScreenScrollView>
