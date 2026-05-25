@@ -4,14 +4,21 @@ import { mapMessage, mapThread, parseAiStreamChunk, parseAiStreamPayload } from 
 import { normalizeAiThreadTitle } from "@/services/ai-thread-title";
 import { rootsApi } from "@/services/roots-api";
 import { tokenStore } from "@/services/token-store";
-import type { AiChatMessage, AiChatModel, AiChatRole, AiChatStreamEvent, AiChatThread } from "@/services/types";
+import type { AiChatAttachment, AiChatFile, AiChatMessage, AiChatModel, AiChatRole, AiChatStreamEvent, AiChatThread, AiChatTimelineEvent } from "@/services/types";
 
 type SendMessageOptions = {
   threadId: string;
   messages: AiChatMessage[];
   modelId?: string;
   traceId?: string;
+  attachments?: AiChatAttachment[];
   onEvent: (event: AiChatStreamEvent) => void;
+};
+
+type UploadFileInput = {
+  uri: string;
+  name: string;
+  mimeType?: string;
 };
 
 type RawThread = Partial<AiChatThread> & {
@@ -67,6 +74,52 @@ function normalizeModelList(result: unknown): AiChatModel[] {
       };
     })
     .filter((model) => model.id);
+}
+
+function normalizeTimelineEvent(item: unknown, fallbackThreadId: string): AiChatTimelineEvent | null {
+  const event = item as {
+    id?: string;
+    threadId?: string;
+    createdAt?: string;
+    type?: string;
+    status?: string;
+    title?: string;
+    message?: string;
+    toolCall?: unknown;
+    result?: unknown;
+    confirmation?: unknown;
+    response?: unknown;
+    file?: unknown;
+    reference?: unknown;
+    usage?: unknown;
+  };
+  const id = event.id ?? `${event.type ?? "event"}-${event.createdAt ?? Date.now()}`;
+  const threadId = event.threadId ?? fallbackThreadId;
+  const createdAt = event.createdAt ?? new Date().toISOString();
+  const parsed =
+    event.type === "status"
+      ? parseAiStreamPayload(JSON.stringify({ type: "status", status: event.status, title: event.title, message: event.message }), "status")
+      : event.type === "tool_call"
+        ? parseAiStreamPayload(JSON.stringify({ type: "tool_call", ...(event.toolCall as object) }), "tool_call")
+        : event.type === "tool_result"
+          ? parseAiStreamPayload(JSON.stringify({ type: "tool_result", ...(event.result as object) }), "tool_result")
+          : event.type === "confirmation_request"
+            ? parseAiStreamPayload(JSON.stringify({ type: "confirmation_request", ...(event.confirmation as object) }), "confirmation_request")
+            : event.type === "confirmation_response"
+              ? parseAiStreamPayload(JSON.stringify({ type: "confirmation_response", ...(event.response as object) }), "confirmation_response")
+              : event.type === "file"
+                ? parseAiStreamPayload(JSON.stringify({ type: "file", file: event.file }), "file")
+                : event.type === "reference"
+                  ? parseAiStreamPayload(JSON.stringify({ type: "reference", reference: event.reference }), "reference")
+                  : event.type === "usage"
+                    ? parseAiStreamPayload(JSON.stringify({ type: "usage", usage: event.usage }), "usage")
+                    : event.type === "error"
+                      ? ({ type: "error", message: event.message ?? "Nexus AI request failed." } as const)
+                      : null;
+  if (!parsed || parsed.type === "thread" || parsed.type === "message" || parsed.type === "delta" || parsed.type === "done") {
+    return null;
+  }
+  return { id, threadId, createdAt, event: parsed };
 }
 
 export { parseAiStreamChunk, parseAiStreamPayload };
@@ -149,7 +202,37 @@ export const aiChatService = {
     return normalizeMessageList(await rootsApi.request(appConfig.ai.messages(threadId)), threadId);
   },
 
-  async sendMessageStream({ threadId, messages, modelId, traceId, onEvent }: SendMessageOptions): Promise<void> {
+  async listTimelineEvents(threadId: string): Promise<AiChatTimelineEvent[]> {
+    const result = await rootsApi.request<{ events?: unknown[] } | unknown[]>(appConfig.ai.events(threadId));
+    const source = Array.isArray(result) ? result : Array.isArray(result.events) ? result.events : [];
+    return source.map((item) => normalizeTimelineEvent(item, threadId)).filter(Boolean) as AiChatTimelineEvent[];
+  },
+
+  async respondToConfirmation(confirmationId: string, accepted: boolean) {
+    return rootsApi.request(appConfig.ai.confirmation(confirmationId), {
+      method: "POST",
+      body: JSON.stringify({ accepted })
+    });
+  },
+
+  async uploadFile(file: UploadFileInput): Promise<AiChatFile> {
+    const form = new FormData();
+    form.append("originApp", "pulse");
+    form.append("file", {
+      uri: file.uri,
+      name: file.name,
+      type: file.mimeType ?? "application/octet-stream"
+    } as unknown as Blob);
+    return rootsApi.request<AiChatFile>(appConfig.ai.files, {
+      method: "POST",
+      body: form,
+      headers: {
+        Accept: "application/json"
+      }
+    });
+  },
+
+  async sendMessageStream({ threadId, messages, modelId, traceId, attachments, onEvent }: SendMessageOptions): Promise<void> {
     const resolvedModelId = modelId ?? (await aiChatService.listModels())[0]?.id;
     if (!resolvedModelId) {
       throw new Error("No Nexus AI model is available.");
@@ -188,6 +271,8 @@ export const aiChatService = {
       body: JSON.stringify({
         threadId,
         modelId: resolvedModelId,
+        originApp: "pulse",
+        attachments,
         messages: requestMessages
       })
     });
@@ -202,6 +287,8 @@ export const aiChatService = {
           body: JSON.stringify({
             threadId,
             modelId: resolvedModelId,
+            originApp: "pulse",
+            attachments,
             messages: requestMessages
           })
         });

@@ -236,6 +236,30 @@ export type AiChatMessage = {
   status?: "sending" | "streaming" | "sent" | "error";
 };
 
+export type AiChatFile = {
+  id: string;
+  name: string;
+  mimeType?: string;
+  size?: number;
+  checksum?: string;
+  originApp?: string;
+  threadId?: string;
+  createdAt?: string;
+};
+
+export type AiChatReference = {
+  id: string;
+  type: string;
+  title?: string;
+  url?: string;
+  summary?: string;
+  data?: Record<string, unknown>;
+};
+
+export type AiChatAttachment = {
+  fileId: string;
+};
+
 export type AiChatStatusEvent = {
   type: "status";
   status: AiToolLifecycleStatus | "thinking" | "working" | "completed";
@@ -295,6 +319,8 @@ export type AiChatTimelineEvent = {
     | { type: "tool_result"; result: AiChatToolResult }
     | { type: "confirmation_request"; confirmation: AiChatConfirmationRequest }
     | { type: "confirmation_response"; response: AiChatConfirmationResponse }
+    | { type: "file"; file: AiChatFile }
+    | { type: "reference"; reference: AiChatReference }
     | { type: "usage"; usage: AiChatUsage }
     | { type: "error"; message: string };
 };
@@ -308,6 +334,8 @@ export type AiChatStreamEvent =
   | { type: "tool_result"; result: AiChatToolResult }
   | { type: "confirmation_request"; confirmation: AiChatConfirmationRequest }
   | { type: "confirmation_response"; response: AiChatConfirmationResponse }
+  | { type: "file"; file: AiChatFile }
+  | { type: "reference"; reference: AiChatReference }
   | { type: "usage"; usage: AiChatUsage }
   | { type: "done" }
   | { type: "error"; message: string };

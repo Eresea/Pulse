@@ -7,7 +7,7 @@ import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
 import { realtimeService } from "@/services/realtime";
 import { updateService } from "@/services/updates";
-import type { AiChatMessage, AiChatModel, AiChatThread, AiChatTimelineEvent, AiDebugLogEntry, ConnectorCatalogItem, ServiceStatus, UserInfo } from "@/services/types";
+import type { AiChatAttachment, AiChatFile, AiChatMessage, AiChatModel, AiChatThread, AiChatTimelineEvent, AiDebugLogEntry, ConnectorCatalogItem, ServiceStatus, UserInfo } from "@/services/types";
 
 type AppState = {
   session: {
@@ -61,6 +61,7 @@ type AppState = {
     createAiThread: () => Promise<AiChatThread>;
     loadAiModels: () => Promise<AiChatModel[]>;
     loadAiMessages: (threadId: string) => Promise<AiChatMessage[]>;
+    loadAiTimelineEvents: (threadId: string) => Promise<AiChatTimelineEvent[]>;
     loadAiThreads: () => Promise<AiChatThread[]>;
     loginEmail: (email: string, password: string) => Promise<void>;
     prefetchUser: () => Promise<UserInfo | undefined>;
@@ -69,8 +70,10 @@ type AppState = {
     registerEmail: (email: string, password: string, displayName: string) => Promise<void>;
     selectAiModel: (modelId: string) => void;
     renameAiThread: (threadId: string, title: string) => Promise<AiChatThread>;
-    sendAiMessage: (threadId: string, content: string) => Promise<void>;
+    respondToAiConfirmation: (confirmationId: string, accepted: boolean) => Promise<void>;
+    sendAiMessage: (threadId: string, content: string, attachments?: AiChatAttachment[]) => Promise<void>;
     signOut: () => Promise<void>;
+    uploadAiFile: (file: { uri: string; name: string; mimeType?: string }) => Promise<AiChatFile>;
   };
 };
 
@@ -413,6 +416,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             setLoadingAiThreadId(undefined);
           }
         },
+        loadAiTimelineEvents: async (threadId: string) => {
+          setLoadingAiThreadId(threadId);
+          setAiChatError(undefined);
+          try {
+            const events = await aiChatService.listTimelineEvents(threadId);
+            setAiTimelineEventsByThread((current) => ({ ...current, [threadId]: mergeTimelineEvents(current[threadId] ?? [], events) }));
+            return events;
+          } catch (err) {
+            setAiChatError(err instanceof Error ? err.message : "Could not load chat events.");
+            throw err;
+          } finally {
+            setLoadingAiThreadId(undefined);
+          }
+        },
         loadAiThreads: async () => {
           return loadAiThreadsAction();
         },
@@ -474,7 +491,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             throw err;
           }
         },
-        sendAiMessage: async (threadId: string, content: string) => {
+        respondToAiConfirmation: async (confirmationId: string, accepted: boolean) => {
+          await aiChatService.respondToConfirmation(confirmationId, accepted);
+        },
+        sendAiMessage: async (threadId: string, content: string, attachments?: AiChatAttachment[]) => {
           const now = new Date().toISOString();
           const traceId = createAiTraceId();
           const userMessage: AiChatMessage = {
@@ -501,6 +521,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             metadata: {
               threadId,
               promptLength: content.length,
+              attachmentCount: attachments?.length ?? 0,
               existingMessageCount: (aiMessagesByThread[threadId] ?? []).length
             }
           });
@@ -532,6 +553,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               threadId,
               modelId,
               traceId,
+              attachments,
               messages: [...priorMessages.filter((message) => message.status !== "error"), userMessage],
               onEvent: (event) => {
                 if (event.type === "thread") {
@@ -554,6 +576,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                   event.type === "tool_result" ||
                   event.type === "confirmation_request" ||
                   event.type === "confirmation_response" ||
+                  event.type === "file" ||
+                  event.type === "reference" ||
                   event.type === "usage"
                 ) {
                   setAiTimelineEventsByThread((current) => appendTimelineEvent(current, threadId, event));
@@ -613,6 +637,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           connectorsRefreshPromise.current = null;
           setPollingStatus("idle");
           clearAiState();
+        },
+        uploadAiFile: async (file) => {
+          return aiChatService.uploadFile(file);
         }
       }
     }),
@@ -622,6 +649,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
+}
+
+function mergeTimelineEvents(current: AiChatTimelineEvent[], incoming: AiChatTimelineEvent[]) {
+  return [...current, ...incoming]
+    .filter((event, index, all) => all.findIndex((item) => item.id === event.id) === index)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
 function mergeThread(current: AiChatThread[], thread: AiChatThread) {
@@ -706,7 +739,7 @@ function appendTimelineEvent(
 
   return {
     ...current,
-    [threadId]: [...(current[threadId] ?? []).filter((item) => item.id !== eventId), timelineEvent]
+    [threadId]: mergeTimelineEvents((current[threadId] ?? []).filter((item) => item.id !== eventId), [timelineEvent])
   };
 }
 

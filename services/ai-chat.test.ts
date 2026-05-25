@@ -107,6 +107,23 @@ describe("parseAiStreamPayload", () => {
       }
     );
   });
+
+  it("parses durable Nexus file and reference events", () => {
+    assert.deepEqual(
+      parseAiStreamPayload(JSON.stringify({ type: "file", file: { id: "file_1", name: "notes.txt", mimeType: "text/plain", size: 12 } }), "file"),
+      {
+        type: "file",
+        file: { id: "file_1", name: "notes.txt", mimeType: "text/plain", size: 12 }
+      }
+    );
+    assert.deepEqual(
+      parseAiStreamPayload(JSON.stringify({ type: "reference", reference: { id: "ref_1", type: "url", title: "Spec", url: "https://example.com/spec" } }), "reference"),
+      {
+        type: "reference",
+        reference: { id: "ref_1", type: "url", title: "Spec", url: "https://example.com/spec" }
+      }
+    );
+  });
 });
 
 describe("normalizeAiThreadTitle", () => {
