@@ -1,7 +1,9 @@
 import type {
   AiChatConfirmationRequest,
   AiChatConfirmationResponse,
+  AiChatFile,
   AiChatMessage,
+  AiChatReference,
   AiChatRole,
   AiChatStreamEvent,
   AiChatThread,
@@ -98,6 +100,8 @@ export function parseAiStreamPayload(payload: string, eventType?: string): AiCha
       accepted?: boolean;
       respondedAt?: string;
       usage?: AiChatUsage;
+      file?: Partial<AiChatFile>;
+      reference?: Partial<AiChatReference>;
     };
     const type = event.type ?? eventType;
 
@@ -131,6 +135,12 @@ export function parseAiStreamPayload(payload: string, eventType?: string): AiCha
     if (type === "confirmation_response") {
       return { type: "confirmation_response", response: normalizeConfirmationResponse(event) };
     }
+    if (type === "file") {
+      return { type: "file", file: normalizeFile(event.file ?? event) };
+    }
+    if (type === "reference") {
+      return { type: "reference", reference: normalizeReference(event.reference ?? event) };
+    }
     if (type === "usage" && event.usage) {
       return { type: "usage", usage: event.usage };
     }
@@ -158,6 +168,34 @@ export function parseAiStreamPayload(payload: string, eventType?: string): AiCha
   }
 
   return null;
+}
+
+function normalizeFile(file: Partial<AiChatFile> & { fileName?: string }): AiChatFile {
+  return compactObject({
+    id: file.id ?? "",
+    name: file.name ?? file.fileName ?? "Attached file",
+    mimeType: file.mimeType,
+    size: file.size,
+    checksum: file.checksum,
+    originApp: file.originApp,
+    threadId: file.threadId,
+    createdAt: file.createdAt
+  }) as AiChatFile;
+}
+
+function normalizeReference(reference: Partial<AiChatReference>): AiChatReference {
+  return compactObject({
+    id: reference.id ?? "",
+    type: reference.type ?? "reference",
+    title: reference.title,
+    url: reference.url,
+    summary: reference.summary,
+    data: reference.data
+  }) as AiChatReference;
+}
+
+function compactObject<T extends Record<string, unknown>>(value: T) {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
 function normalizeStatus(status?: string): AiToolLifecycleStatus | "thinking" | "working" | "completed" | undefined {

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, FlatList, Keyboard, KeyboardAvoidingView, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MessageRenderer } from "@/components/ai-chat/message-renderer";
-import { ConfirmationCard, ErrorCard, MessageActionButton, StatusCard, ToolCallCard, ToolResultCard } from "@/components/ai-chat/timeline-cards";
+import { ConfirmationCard, ErrorCard, FileEventCard, MessageActionButton, ReferenceEventCard, StatusCard, ToolCallCard, ToolResultCard } from "@/components/ai-chat/timeline-cards";
 import { cn } from "@/lib/cn";
 import type { AiChatMessage, AiChatModel, AiChatTimelineEvent } from "@/services/types";
 import { useAppState } from "@/state/app-state";
@@ -18,6 +18,9 @@ type ComposerAttachment = {
   size?: number;
   mimeType?: string;
   uri: string;
+  fileId?: string;
+  status: "local" | "uploading" | "ready" | "error";
+  error?: string;
 };
 
 const KEYBOARD_COMPOSER_GAP = 12;
@@ -35,6 +38,7 @@ export default function AiChatThreadScreen() {
   const [draft, setDraft] = useState("");
   const [sendError, setSendError] = useState<string | undefined>();
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [submittingConfirmationId, setSubmittingConfirmationId] = useState<string | undefined>();
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [keyboardOverlap, setKeyboardOverlap] = useState(0);
   const [renaming, setRenaming] = useState(false);
@@ -52,11 +56,16 @@ export default function AiChatThreadScreen() {
   const selectedModel = aiChat.models.find((model) => model.id === aiChat.selectedModelId);
 
   const loadMessages = useCallback(() => {
-    if (!threadId || aiChat.messagesByThread[threadId]) {
+    if (!threadId) {
       return;
     }
-    void actions.loadAiMessages(threadId).catch(() => undefined);
-  }, [actions, aiChat.messagesByThread, threadId]);
+    if (!aiChat.messagesByThread[threadId]) {
+      void actions.loadAiMessages(threadId).catch(() => undefined);
+    }
+    if (!aiChat.timelineEventsByThread[threadId]) {
+      void actions.loadAiTimelineEvents(threadId).catch(() => undefined);
+    }
+  }, [actions, aiChat.messagesByThread, aiChat.timelineEventsByThread, threadId]);
 
   useEffect(() => {
     loadMessages();
@@ -100,15 +109,41 @@ export default function AiChatThreadScreen() {
       return;
     }
     const content = draft.trim();
-    setDraft("");
     setSendError(undefined);
     stickToBottomRef.current = true;
     try {
-      await actions.sendAiMessage(threadId, content);
+      const uploadedAttachments = await uploadPendingAttachments();
+      setDraft("");
+      await actions.sendAiMessage(threadId, content, uploadedAttachments.map((attachment) => ({ fileId: attachment.fileId! })));
+      setAttachments([]);
     } catch (err) {
       setSendError(err instanceof Error ? err.message : "Could not send message.");
-      setDraft(content);
+      if (!draft.trim()) {
+        setDraft(content);
+      }
     }
+  };
+
+  const uploadPendingAttachments = async () => {
+    const uploaded: ComposerAttachment[] = [];
+    for (const attachment of attachments) {
+      if (attachment.fileId) {
+        uploaded.push(attachment);
+        continue;
+      }
+      setAttachments((current) => current.map((item) => (item.id === attachment.id ? { ...item, status: "uploading", error: undefined } : item)));
+      try {
+        const file = await actions.uploadAiFile({ uri: attachment.uri, name: attachment.name, mimeType: attachment.mimeType });
+        const nextAttachment = { ...attachment, fileId: file.id, status: "ready" as const, size: file.size ?? attachment.size, mimeType: file.mimeType ?? attachment.mimeType };
+        uploaded.push(nextAttachment);
+        setAttachments((current) => current.map((item) => (item.id === attachment.id ? nextAttachment : item)));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Upload failed.";
+        setAttachments((current) => current.map((item) => (item.id === attachment.id ? { ...item, status: "error", error: message } : item)));
+        throw err;
+      }
+    }
+    return uploaded;
   };
 
   const startRename = () => {
@@ -177,9 +212,25 @@ export default function AiChatThreadScreen() {
         name: asset.name,
         size: asset.size,
         mimeType: asset.mimeType,
-        uri: asset.uri
+        uri: asset.uri,
+        status: "local" as const
       }))
     ]);
+  };
+
+  const respondToConfirmation = async (confirmationId: string, accepted: boolean) => {
+    setSubmittingConfirmationId(confirmationId);
+    setSendError(undefined);
+    try {
+      await actions.respondToAiConfirmation(confirmationId, accepted);
+      if (threadId) {
+        await actions.loadAiTimelineEvents(threadId);
+      }
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Could not submit confirmation.");
+    } finally {
+      setSubmittingConfirmationId(undefined);
+    }
   };
 
   const removeAttachment = (id: string) => {
@@ -287,7 +338,11 @@ export default function AiChatThreadScreen() {
                 onRetry={() => void retryFromMessage(item.message)}
               />
             ) : (
-              <TimelineEventCard timelineEvent={item.event} />
+              <TimelineEventCard
+                submittingConfirmationId={submittingConfirmationId}
+                timelineEvent={item.event}
+                onRespondToConfirmation={(confirmationId, accepted) => void respondToConfirmation(confirmationId, accepted)}
+              />
             )
           }
           scrollEventThrottle={80}
@@ -308,7 +363,6 @@ export default function AiChatThreadScreen() {
                   ))}
                 </View>
               </ScrollView>
-              <Text className="text-xs text-muted-foreground dark:text-slate-400">Files are staged locally and will not be sent yet.</Text>
             </View>
           ) : null}
           {attachmentMenuOpen ? (
@@ -420,7 +474,8 @@ function AttachmentChip({ attachment, onRemove }: { attachment: ComposerAttachme
 }
 
 function formatAttachmentDetail(attachment: ComposerAttachment) {
-  const details = [attachment.mimeType, formatFileSize(attachment.size)].filter(Boolean);
+  const status = attachment.status === "uploading" ? "Uploading" : attachment.status === "ready" ? "Ready" : attachment.status === "error" ? attachment.error ?? "Upload failed" : undefined;
+  const details = [status, attachment.mimeType, formatFileSize(attachment.size)].filter(Boolean);
   return details.join(" - ");
 }
 
@@ -486,7 +541,15 @@ function ChatEmptyState({ colors, isLoading }: { colors: ReturnType<typeof useTh
   );
 }
 
-function TimelineEventCard({ timelineEvent }: { timelineEvent: AiChatTimelineEvent }) {
+function TimelineEventCard({
+  timelineEvent,
+  submittingConfirmationId,
+  onRespondToConfirmation
+}: {
+  timelineEvent: AiChatTimelineEvent;
+  submittingConfirmationId?: string;
+  onRespondToConfirmation: (confirmationId: string, accepted: boolean) => void;
+}) {
   const event = timelineEvent.event;
   if (event.type === "status") {
     return <StatusCard event={event} />;
@@ -498,7 +561,13 @@ function TimelineEventCard({ timelineEvent }: { timelineEvent: AiChatTimelineEve
     return <ToolResultCard result={event.result} />;
   }
   if (event.type === "confirmation_request") {
-    return <ConfirmationCard confirmation={event.confirmation} />;
+    return <ConfirmationCard confirmation={event.confirmation} submitting={submittingConfirmationId === event.confirmation.id} onRespond={(accepted) => onRespondToConfirmation(event.confirmation.id, accepted)} />;
+  }
+  if (event.type === "file") {
+    return <FileEventCard file={event.file} />;
+  }
+  if (event.type === "reference") {
+    return <ReferenceEventCard reference={event.reference} />;
   }
   if (event.type === "error") {
     return <ErrorCard message={event.message} />;

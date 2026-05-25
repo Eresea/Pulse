@@ -33,6 +33,11 @@ export const appConfig = {
     threads: "/api/v1/ai/chat/threads",
     thread: (threadId: string) => `/api/v1/ai/chat/threads/${encodeURIComponent(threadId)}`,
     messages: (threadId: string) => `/api/v1/ai/chat/threads/${encodeURIComponent(threadId)}/messages`,
+    events: (threadId: string) => `/api/v1/ai/chat/threads/${encodeURIComponent(threadId)}/events`,
+    confirmation: (confirmationId: string) => `/api/v1/ai/chat/confirmations/${encodeURIComponent(confirmationId)}`,
+    files: "/api/v1/ai/files",
+    file: (fileId: string) => `/api/v1/ai/files/${encodeURIComponent(fileId)}`,
+    tools: "/api/v1/ai/tools",
     chatStream: "/api/v1/ai/chat/stream"
   },
   sync: {
