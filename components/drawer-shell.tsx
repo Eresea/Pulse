@@ -263,14 +263,15 @@ export function DrawerShell({ children }: { children: ReactNode }) {
                   </View>
 
                   <View className="mt-6 gap-3">
-                    <SectionTitle>Recent AI Threads</SectionTitle>
+                    <SectionTitle>Continue Chat</SectionTitle>
                     {aiChat.threads.length ? (
                       aiChat.threads.slice(0, 3).map((thread) => (
                         <ReservedRow
                           key={thread.id}
                           icon={Bot}
                           label={thread.title}
-                          muted={thread.status !== "streaming"}
+                          detail={thread.preview || formatDrawerThreadTime(thread.lastActivityAt)}
+                          live={thread.status === "streaming"}
                           onPress={() => {
                             router.push({ pathname: "/(tabs)/chat/[threadId]", params: { threadId: thread.id } } as unknown as Href);
                             if (open) {
@@ -358,16 +359,49 @@ function SectionTitle({ children }: { children: ReactNode }) {
   return <Text className="px-1 text-xs font-semibold uppercase text-muted-foreground dark:text-slate-400">{children}</Text>;
 }
 
-function ReservedRow({ icon: Icon, label, muted = false, onPress }: { icon: React.ComponentType<{ color: string; size: number }>; label: string; muted?: boolean; onPress?: () => void }) {
+function ReservedRow({
+  icon: Icon,
+  label,
+  detail,
+  live = false,
+  muted = false,
+  onPress
+}: {
+  icon: React.ComponentType<{ color: string; size: number }>;
+  label: string;
+  detail?: string;
+  live?: boolean;
+  muted?: boolean;
+  onPress?: () => void;
+}) {
   const { colors } = useTheme();
   const Container = onPress ? Pressable : View;
 
   return (
-    <Container accessibilityRole={onPress ? "button" : undefined} className={cn("flex-row items-center gap-3 rounded-md px-3 py-2", muted ? "opacity-60" : undefined)} onPress={onPress}>
-      <Icon color={colors.muted} size={17} />
-      <Text className="min-w-0 flex-1 text-sm text-muted-foreground dark:text-slate-400" numberOfLines={1}>
-        {label}
-      </Text>
+    <Container accessibilityRole={onPress ? "button" : undefined} className={cn("flex-row items-center gap-3 rounded-md px-3 py-2", onPress ? "active:bg-card dark:active:bg-neutral-900" : undefined, muted ? "opacity-60" : undefined)} onPress={onPress}>
+      <Icon color={live ? colors.primary : colors.icon} size={17} />
+      <View className="min-w-0 flex-1">
+        <Text className={cn("text-sm", onPress ? "font-semibold text-foreground dark:text-slate-100" : "text-muted-foreground dark:text-slate-400")} numberOfLines={1}>
+          {label}
+        </Text>
+        {detail ? (
+          <Text className="text-xs text-muted-foreground dark:text-slate-400" numberOfLines={1}>
+            {detail}
+          </Text>
+        ) : null}
+      </View>
+      {onPress ? <ChevronRight color={colors.muted} size={16} /> : null}
     </Container>
   );
+}
+
+function formatDrawerThreadTime(value?: string) {
+  if (!value) {
+    return undefined;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
