@@ -5,7 +5,7 @@ import { router, usePathname } from "expo-router";
 import type { Href } from "expo-router";
 import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, Settings, UserRound } from "lucide-react-native";
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { Alert, BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { cancelAnimation, Easing, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -95,7 +95,7 @@ export function PageHeader({ title }: { title: string }) {
 
 export function DrawerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { session, aiChat } = useAppState();
+  const { session, aiChat, actions } = useAppState();
   const { width: screenWidth } = useWindowDimensions();
   const { colors } = useTheme();
   const profileLabel = session.user?.name || session.user?.email || "Profile";
@@ -272,6 +272,14 @@ export function DrawerShell({ children }: { children: ReactNode }) {
                           label={thread.title}
                           detail={thread.preview || formatDrawerThreadTime(thread.lastActivityAt)}
                           live={thread.status === "streaming"}
+                          onLongPress={() => {
+                            confirmDeleteThread(thread.title, async () => {
+                              await actions.deleteAiThread(thread.id);
+                              if (pathname.includes(thread.id)) {
+                                router.replace("/(tabs)/chat" as Href);
+                              }
+                            });
+                          }}
                           onPress={() => {
                             router.push({ pathname: "/(tabs)/chat/[threadId]", params: { threadId: thread.id } } as unknown as Href);
                             if (open) {
@@ -365,6 +373,7 @@ function ReservedRow({
   detail,
   live = false,
   muted = false,
+  onLongPress,
   onPress
 }: {
   icon: React.ComponentType<{ color: string; size: number }>;
@@ -372,13 +381,14 @@ function ReservedRow({
   detail?: string;
   live?: boolean;
   muted?: boolean;
+  onLongPress?: () => void;
   onPress?: () => void;
 }) {
   const { colors } = useTheme();
   const Container = onPress ? Pressable : View;
 
   return (
-    <Container accessibilityRole={onPress ? "button" : undefined} className={cn("flex-row items-center gap-3 rounded-md px-3 py-2", onPress ? "active:bg-card dark:active:bg-neutral-900" : undefined, muted ? "opacity-60" : undefined)} onPress={onPress}>
+    <Container accessibilityRole={onPress ? "button" : undefined} className={cn("flex-row items-center gap-3 rounded-md px-3 py-2", onPress ? "active:bg-card dark:active:bg-neutral-900" : undefined, muted ? "opacity-60" : undefined)} onLongPress={onLongPress} onPress={onPress}>
       <Icon color={live ? colors.primary : colors.icon} size={17} />
       <View className="min-w-0 flex-1">
         <Text className={cn("text-sm", onPress ? "font-semibold text-foreground dark:text-slate-100" : "text-muted-foreground dark:text-slate-400")} numberOfLines={1}>
@@ -393,6 +403,19 @@ function ReservedRow({
       {onPress ? <ChevronRight color={colors.muted} size={16} /> : null}
     </Container>
   );
+}
+
+function confirmDeleteThread(title: string, onDelete: () => Promise<void>) {
+  Alert.alert("Delete chat?", title, [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Delete",
+      style: "destructive",
+      onPress: () => {
+        void onDelete().catch(() => undefined);
+      }
+    }
+  ]);
 }
 
 function formatDrawerThreadTime(value?: string) {

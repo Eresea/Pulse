@@ -69,6 +69,7 @@ type AppState = {
     refreshUser: () => Promise<UserInfo>;
     registerEmail: (email: string, password: string, displayName: string) => Promise<void>;
     selectAiModel: (modelId: string) => void;
+    deleteAiThread: (threadId: string) => Promise<void>;
     renameAiThread: (threadId: string, title: string) => Promise<AiChatThread>;
     respondToAiConfirmation: (confirmationId: string, accepted: boolean) => Promise<void>;
     sendAiMessage: (threadId: string, content: string, attachments?: AiChatAttachment[]) => Promise<void>;
@@ -475,6 +476,34 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         selectAiModel: (modelId: string) => {
           setSelectedAiModelId(modelId);
         },
+        deleteAiThread: async (threadId: string) => {
+          setAiChatError(undefined);
+          const previousThreads = aiThreads;
+          const previousMessages = aiMessagesByThread[threadId];
+          const previousTimelineEvents = aiTimelineEventsByThread[threadId];
+          setAiThreads((current) => current.filter((thread) => thread.id !== threadId));
+          setAiMessagesByThread((current) => omitRecordKey(current, threadId));
+          setAiTimelineEventsByThread((current) => omitRecordKey(current, threadId));
+          if (streamingAiThreadId === threadId) {
+            setStreamingAiThreadId(undefined);
+          }
+          try {
+            await aiChatService.deleteThread(threadId);
+          } catch (err) {
+            setAiThreads(previousThreads);
+            if (previousMessages) {
+              setAiMessagesByThread((current) => ({ ...current, [threadId]: previousMessages }));
+            }
+            if (previousTimelineEvents) {
+              setAiTimelineEventsByThread((current) => ({ ...current, [threadId]: previousTimelineEvents }));
+            }
+            if (streamingAiThreadId === threadId) {
+              setStreamingAiThreadId(threadId);
+            }
+            setAiChatError(err instanceof Error ? err.message : "Could not delete thread.");
+            throw err;
+          }
+        },
         renameAiThread: async (threadId: string, title: string) => {
           setAiChatError(undefined);
           const previousThread = aiThreads.find((thread) => thread.id === threadId);
@@ -665,6 +694,11 @@ function touchThread(current: AiChatThread[], threadId: string, patch: Partial<A
   return current
     .map((thread) => (thread.id === threadId ? compactThreadPatch(thread, patch) : thread))
     .sort(sortThreads);
+}
+
+function omitRecordKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  const { [key]: _omitted, ...rest } = record;
+  return rest;
 }
 
 function compactThreadPatch(thread: AiChatThread, patch: Partial<AiChatThread>) {

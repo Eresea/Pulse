@@ -198,6 +198,12 @@ export const aiChatService = {
     }));
   },
 
+  async deleteThread(threadId: string): Promise<void> {
+    await rootsApi.request(appConfig.ai.thread(threadId), {
+      method: "DELETE"
+    });
+  },
+
   async listMessages(threadId: string): Promise<AiChatMessage[]> {
     return normalizeMessageList(await rootsApi.request(appConfig.ai.messages(threadId)), threadId);
   },

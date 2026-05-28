@@ -2,7 +2,7 @@ import { Activity, Bot, ChevronRight, MessageCirclePlus, Radio, RefreshCcw, Shie
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { Screen, ScreenScrollView } from "@/components/screen";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,7 +73,7 @@ export default function HomeScreen() {
               >
                 {creating ? "Starting..." : "Start new chat"}
               </Button>
-              {latestThread ? <ThreadAction thread={latestThread} /> : null}
+              {latestThread ? <ThreadAction thread={latestThread} onDelete={() => actions.deleteAiThread(latestThread.id)} /> : null}
             </View>
           </CardContent>
         </Card>
@@ -96,7 +96,7 @@ export default function HomeScreen() {
                 <Text className="text-sm text-muted-foreground dark:text-slate-400">Loading chats</Text>
               </View>
             ) : recentThreads.length ? (
-              recentThreads.map((thread) => <ThreadRow key={thread.id} thread={thread} />)
+              recentThreads.map((thread) => <ThreadRow key={thread.id} thread={thread} onDelete={() => actions.deleteAiThread(thread.id)} />)
             ) : (
               <View className="items-center gap-2 rounded-md border border-dashed border-border bg-background p-5 dark:border-neutral-800 dark:bg-black">
                 <MessageCirclePlus color={colors.muted} size={22} />
@@ -172,7 +172,7 @@ export default function HomeScreen() {
   );
 }
 
-function ThreadAction({ thread }: { thread: AiChatThread }) {
+function ThreadAction({ thread, onDelete }: { thread: AiChatThread; onDelete: () => Promise<void> }) {
   const { colors } = useTheme();
 
   return (
@@ -180,6 +180,7 @@ function ThreadAction({ thread }: { thread: AiChatThread }) {
       accessibilityRole="button"
       accessibilityLabel={`Continue ${thread.title}`}
       className="h-12 flex-row items-center justify-between gap-3 rounded-md border border-border bg-card px-3 dark:border-neutral-800 dark:bg-black"
+      onLongPress={() => confirmDeleteThread(thread, onDelete)}
       onPress={() => router.push(threadHref(thread.id))}
     >
       <View className="min-w-0 flex-1">
@@ -195,11 +196,11 @@ function ThreadAction({ thread }: { thread: AiChatThread }) {
   );
 }
 
-function ThreadRow({ thread }: { thread: AiChatThread }) {
+function ThreadRow({ thread, onDelete }: { thread: AiChatThread; onDelete: () => Promise<void> }) {
   const { colors } = useTheme();
 
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Open ${thread.title}`} className="rounded-md border border-border bg-background p-3 dark:border-neutral-800 dark:bg-black" onPress={() => router.push(threadHref(thread.id))}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Open ${thread.title}`} className="rounded-md border border-border bg-background p-3 dark:border-neutral-800 dark:bg-black" onLongPress={() => confirmDeleteThread(thread, onDelete)} onPress={() => router.push(threadHref(thread.id))}>
       <View className="flex-row items-center justify-between gap-3">
         <View className="min-w-0 flex-1 flex-row items-center gap-3">
           <View className="size-9 items-center justify-center rounded-full bg-muted dark:bg-slate-800">
@@ -221,6 +222,19 @@ function ThreadRow({ thread }: { thread: AiChatThread }) {
       </View>
     </Pressable>
   );
+}
+
+function confirmDeleteThread(thread: AiChatThread, onDelete: () => Promise<void>) {
+  Alert.alert("Delete chat?", thread.title, [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Delete",
+      style: "destructive",
+      onPress: () => {
+        void onDelete().catch(() => undefined);
+      }
+    }
+  ]);
 }
 
 function StatusBadge({ label, value, healthy }: { label: string; value: string; healthy: boolean }) {

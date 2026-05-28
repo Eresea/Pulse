@@ -2,7 +2,7 @@ import { Bot, MessageCirclePlus } from "lucide-react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { PageHeader } from "@/components/drawer-shell";
 import { Screen, ScreenScrollView } from "@/components/screen";
 import { Badge } from "@/components/ui/badge";
@@ -75,7 +75,7 @@ export default function AiChatScreen() {
         {aiChat.threads.length ? (
           <View className="gap-3">
             {aiChat.threads.map((thread) => (
-              <ThreadRow key={thread.id} thread={thread} />
+              <ThreadRow key={thread.id} thread={thread} onDelete={() => actions.deleteAiThread(thread.id)} />
             ))}
           </View>
         ) : !aiChat.isLoadingThreads ? (
@@ -95,11 +95,11 @@ export default function AiChatScreen() {
   );
 }
 
-function ThreadRow({ thread }: { thread: AiChatThread }) {
+function ThreadRow({ thread, onDelete }: { thread: AiChatThread; onDelete: () => Promise<void> }) {
   const { colors } = useTheme();
 
   return (
-    <Pressable accessibilityRole="button" onPress={() => router.push(threadHref(thread.id))}>
+    <Pressable accessibilityRole="button" onLongPress={() => confirmDeleteThread(thread, onDelete)} onPress={() => router.push(threadHref(thread.id))}>
       <Card>
         <CardContent className="gap-3 p-4">
           <View className="flex-row items-center justify-between gap-3">
@@ -125,6 +125,19 @@ function ThreadRow({ thread }: { thread: AiChatThread }) {
       </Card>
     </Pressable>
   );
+}
+
+function confirmDeleteThread(thread: AiChatThread, onDelete: () => Promise<void>) {
+  Alert.alert("Delete chat?", thread.title, [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Delete",
+      style: "destructive",
+      onPress: () => {
+        void onDelete().catch(() => undefined);
+      }
+    }
+  ]);
 }
 
 function threadHref(threadId: string): Href {
