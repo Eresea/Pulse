@@ -1,13 +1,15 @@
-import { Bot, MessageCirclePlus } from "lucide-react-native";
+import { Bot, MessageCirclePlus, MoreVertical, Trash2 } from "lucide-react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { PageHeader } from "@/components/drawer-shell";
 import { Screen, ScreenScrollView } from "@/components/screen";
+import { ActionSheet } from "@/components/ui/action-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { triggerLongPressFeedback, triggerTapFeedback } from "@/lib/tactile-feedback";
 import type { AiChatThread } from "@/services/types";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
@@ -16,6 +18,7 @@ export default function AiChatScreen() {
   const { aiChat, actions } = useAppState();
   const { colors } = useTheme();
   const [creating, setCreating] = useState(false);
+  const [actionThread, setActionThread] = useState<AiChatThread | undefined>();
   const didLoadThreads = useRef(false);
 
   const loadThreads = useCallback(() => {
@@ -75,7 +78,7 @@ export default function AiChatScreen() {
         {aiChat.threads.length ? (
           <View className="gap-3">
             {aiChat.threads.map((thread) => (
-              <ThreadRow key={thread.id} thread={thread} onDelete={() => actions.deleteAiThread(thread.id)} />
+              <ThreadRow key={thread.id} thread={thread} onOpenActions={() => setActionThread(thread)} />
             ))}
           </View>
         ) : !aiChat.isLoadingThreads ? (
@@ -91,15 +94,42 @@ export default function AiChatScreen() {
           </View>
         ) : null}
       </ScreenScrollView>
+      <ActionSheet
+        actions={[
+          {
+            label: "Delete chat",
+            accessibilityLabel: "Delete AI chat",
+            destructive: true,
+            icon: Trash2,
+            onPress: () => {
+              if (actionThread) {
+                void actions.deleteAiThread(actionThread.id).catch(() => undefined);
+              }
+            }
+          }
+        ]}
+        description="This removes the chat history from Pulse and Nexus."
+        onClose={() => setActionThread(undefined)}
+        title={actionThread?.title ?? "Chat actions"}
+        visible={Boolean(actionThread)}
+      />
     </Screen>
   );
 }
 
-function ThreadRow({ thread, onDelete }: { thread: AiChatThread; onDelete: () => Promise<void> }) {
+function ThreadRow({ thread, onOpenActions }: { thread: AiChatThread; onOpenActions: () => void }) {
   const { colors } = useTheme();
+  const openActionsFromLongPress = () => {
+    triggerLongPressFeedback();
+    onOpenActions();
+  };
+  const openActionsFromButton = () => {
+    triggerTapFeedback();
+    onOpenActions();
+  };
 
   return (
-    <Pressable accessibilityRole="button" onLongPress={() => confirmDeleteThread(thread, onDelete)} onPress={() => router.push(threadHref(thread.id))}>
+    <Pressable accessibilityRole="button" onLongPress={openActionsFromLongPress} onPress={() => router.push(threadHref(thread.id))}>
       <Card>
         <CardContent className="gap-3 p-4">
           <View className="flex-row items-center justify-between gap-3">
@@ -120,24 +150,14 @@ function ThreadRow({ thread, onDelete }: { thread: AiChatThread; onDelete: () =>
               <Text className="text-xs text-muted-foreground dark:text-slate-400">{formatThreadTime(thread.lastActivityAt)}</Text>
               {thread.status === "streaming" ? <Badge>Live</Badge> : thread.unreadCount ? <Badge variant="secondary">{thread.unreadCount}</Badge> : null}
             </View>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Open actions for ${thread.title}`} className="size-9 items-center justify-center rounded-full bg-muted dark:bg-slate-800" onPress={openActionsFromButton}>
+              <MoreVertical color={colors.muted} size={18} />
+            </Pressable>
           </View>
         </CardContent>
       </Card>
     </Pressable>
   );
-}
-
-function confirmDeleteThread(thread: AiChatThread, onDelete: () => Promise<void>) {
-  Alert.alert("Delete chat?", thread.title, [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: "Delete",
-      style: "destructive",
-      onPress: () => {
-        void onDelete().catch(() => undefined);
-      }
-    }
-  ]);
 }
 
 function threadHref(threadId: string): Href {

@@ -353,7 +353,7 @@ export default function AiChatThreadScreen() {
           onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
           style={{ paddingBottom: composerBottomPadding }}
         >
-          {sendError || aiChat.error ? <Text className="mb-2 text-sm text-red-600 dark:text-red-400">{sendError ?? aiChat.error}</Text> : null}
+          {sendError ? <Text className="mb-2 text-sm text-red-600 dark:text-red-400">{sendError}</Text> : null}
           {attachments.length ? (
             <View className="mb-2 gap-2">
               <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false}>

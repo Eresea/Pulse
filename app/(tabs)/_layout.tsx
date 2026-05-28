@@ -3,6 +3,10 @@ import { ActivityIndicator, View } from "react-native";
 import { DrawerShell } from "@/components/drawer-shell";
 import { useAppState } from "@/state/app-state";
 
+export const unstable_settings = {
+  initialRouteName: "index"
+};
+
 export default function TabsLayout() {
   const { session } = useAppState();
 

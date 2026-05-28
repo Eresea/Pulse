@@ -37,7 +37,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (session.isAuthenticated) {
-      router.replace("/(tabs)/inbox");
+      router.replace("/(tabs)");
     }
   }, [session.isAuthenticated]);
 
@@ -62,7 +62,7 @@ export default function LoginScreen() {
     setSubmitting(true);
     void actions
       .completeLogin(payload.accessToken, payload.refreshToken)
-      .then(() => router.replace("/(tabs)/inbox"))
+      .then(() => router.replace("/(tabs)"))
       .catch((err) => setError(err instanceof Error ? err.message : "Unable to complete Google sign-in."))
       .finally(() => setSubmitting(false));
   }, [actions]);
@@ -89,7 +89,7 @@ export default function LoginScreen() {
         return;
       }
       await actions.loginEmail(email.trim(), password);
-      router.replace("/(tabs)/inbox");
+      router.replace("/(tabs)");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {

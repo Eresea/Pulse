@@ -39,7 +39,7 @@ export default function AuthCallbackScreen() {
   }, [actions, callbackUrl]);
 
   if (done || session.isAuthenticated) {
-    return <Redirect href="/(tabs)/inbox" />;
+    return <Redirect href="/(tabs)" />;
   }
 
   if (error) {

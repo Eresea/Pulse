@@ -405,13 +405,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         },
         loadAiMessages: async (threadId: string) => {
           setLoadingAiThreadId(threadId);
-          setAiChatError(undefined);
           try {
             const messages = await aiChatService.listMessages(threadId);
             setAiMessagesByThread((current) => ({ ...current, [threadId]: messages }));
             return messages;
           } catch (err) {
-            setAiChatError(err instanceof Error ? err.message : "Could not load chat messages.");
             throw err;
           } finally {
             setLoadingAiThreadId(undefined);
@@ -419,13 +417,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         },
         loadAiTimelineEvents: async (threadId: string) => {
           setLoadingAiThreadId(threadId);
-          setAiChatError(undefined);
           try {
             const events = await aiChatService.listTimelineEvents(threadId);
             setAiTimelineEventsByThread((current) => ({ ...current, [threadId]: mergeTimelineEvents(current[threadId] ?? [], events) }));
             return events;
           } catch (err) {
-            setAiChatError(err instanceof Error ? err.message : "Could not load chat events.");
             throw err;
           } finally {
             setLoadingAiThreadId(undefined);

@@ -1,14 +1,17 @@
 import { cn } from "@/lib/cn";
+import { triggerLongPressFeedback, triggerTapFeedback } from "@/lib/tactile-feedback";
+import type { AiChatThread } from "@/services/types";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 import { router, usePathname } from "expo-router";
 import type { Href } from "expo-router";
-import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, Settings, UserRound } from "lucide-react-native";
+import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, MoreVertical, Settings, Trash2, UserRound } from "lucide-react-native";
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
+import { BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { cancelAnimation, Easing, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ActionSheet } from "@/components/ui/action-sheet";
 
 type DrawerDestination = {
   label: string;
@@ -104,6 +107,7 @@ export function DrawerShell({ children }: { children: ReactNode }) {
   const dragStartX = useSharedValue(0);
   const lastPrimaryHref = useRef<PrimaryDrawerHref>("/(tabs)");
   const [open, setOpen] = useState(false);
+  const [actionThread, setActionThread] = useState<AiChatThread | undefined>();
 
   const setOpenState = useCallback((nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -272,13 +276,13 @@ export function DrawerShell({ children }: { children: ReactNode }) {
                           label={thread.title}
                           detail={thread.preview || formatDrawerThreadTime(thread.lastActivityAt)}
                           live={thread.status === "streaming"}
+                          onActionsPress={() => {
+                            triggerTapFeedback();
+                            setActionThread(thread);
+                          }}
                           onLongPress={() => {
-                            confirmDeleteThread(thread.title, async () => {
-                              await actions.deleteAiThread(thread.id);
-                              if (pathname.includes(thread.id)) {
-                                router.replace("/(tabs)/chat" as Href);
-                              }
-                            });
+                            triggerLongPressFeedback();
+                            setActionThread(thread);
                           }}
                           onPress={() => {
                             router.push({ pathname: "/(tabs)/chat/[threadId]", params: { threadId: thread.id } } as unknown as Href);
@@ -344,6 +348,33 @@ export function DrawerShell({ children }: { children: ReactNode }) {
             >
               {children}
             </Animated.View>
+            <ActionSheet
+              actions={[
+                {
+                  label: "Delete chat",
+                  accessibilityLabel: "Delete AI chat",
+                  destructive: true,
+                  icon: Trash2,
+                  onPress: () => {
+                    if (!actionThread) {
+                      return;
+                    }
+                    void actions
+                      .deleteAiThread(actionThread.id)
+                      .then(() => {
+                        if (pathname.includes(actionThread.id)) {
+                          router.replace("/(tabs)/chat" as Href);
+                        }
+                      })
+                      .catch(() => undefined);
+                  }
+                }
+              ]}
+              description="This removes the chat history from Pulse and Nexus."
+              onClose={() => setActionThread(undefined)}
+              title={actionThread?.title ?? "Chat actions"}
+              visible={Boolean(actionThread)}
+            />
           </View>
         </GestureDetector>
       </DrawerShellContext.Provider>
@@ -373,6 +404,7 @@ function ReservedRow({
   detail,
   live = false,
   muted = false,
+  onActionsPress,
   onLongPress,
   onPress
 }: {
@@ -381,6 +413,7 @@ function ReservedRow({
   detail?: string;
   live?: boolean;
   muted?: boolean;
+  onActionsPress?: () => void;
   onLongPress?: () => void;
   onPress?: () => void;
 }) {
@@ -400,22 +433,15 @@ function ReservedRow({
           </Text>
         ) : null}
       </View>
-      {onPress ? <ChevronRight color={colors.muted} size={16} /> : null}
+      {onActionsPress ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Open actions for ${label}`} className="size-8 items-center justify-center rounded-full bg-muted dark:bg-slate-800" onPress={onActionsPress}>
+          <MoreVertical color={colors.muted} size={16} />
+        </Pressable>
+      ) : onPress ? (
+        <ChevronRight color={colors.muted} size={16} />
+      ) : null}
     </Container>
   );
-}
-
-function confirmDeleteThread(title: string, onDelete: () => Promise<void>) {
-  Alert.alert("Delete chat?", title, [
-    { text: "Cancel", style: "cancel" },
-    {
-      text: "Delete",
-      style: "destructive",
-      onPress: () => {
-        void onDelete().catch(() => undefined);
-      }
-    }
-  ]);
 }
 
 function formatDrawerThreadTime(value?: string) {
