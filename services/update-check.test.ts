@@ -1,6 +1,6 @@
+import { buildApkUpdateCheckPath, parseApkUpdateResponse } from "@/services/update-check";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildApkUpdateCheckPath, parseApkUpdateResponse } from "@/services/update-check";
 
 describe("buildApkUpdateCheckPath", () => {
   it("builds the Nexus APK update check query for Pulse", () => {
@@ -9,10 +9,10 @@ describe("buildApkUpdateCheckPath", () => {
         appId: "pulse",
         platform: "android",
         channel: "production",
-        currentVersion: "0.1.2",
+        currentVersion: "0.1.3",
         deviceId: "device 1"
       }),
-      "/api/v1/updates/check?appId=pulse&platform=android&channel=production&currentVersion=0.1.2&deviceId=device+1"
+      "/api/v1/updates/check?appId=pulse&platform=android&channel=production&currentVersion=0.1.3&deviceId=device+1"
     );
   });
 });
