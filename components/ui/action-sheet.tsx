@@ -101,57 +101,57 @@ export function ActionSheet({ actions, description, onClose, title, visible }: A
   return (
     <Modal animationType="fade" onRequestClose={closeWithAnimation} transparent visible={mounted}>
       <GestureHandlerRootView className="flex-1">
-      <View className="flex-1 justify-end bg-black/45">
-        <Pressable accessibilityRole="button" accessibilityLabel="Close action sheet" className="flex-1" onPress={closeWithAnimation} />
-        <GestureDetector gesture={panGesture}>
-          <Animated.View style={sheetStyle}>
-            <SafeAreaView className="bg-background dark:bg-black" edges={["bottom"]}>
-              <View className="rounded-t-lg border-t border-border bg-background px-3 pb-2 pt-2 dark:border-neutral-800 dark:bg-black">
-                <View className="mb-2 items-center py-1">
-                  <View className="h-1 w-10 rounded-full bg-muted dark:bg-slate-700" />
-                </View>
+        <View className="flex-1 justify-end bg-black/45">
+          <Pressable accessibilityRole="button" accessibilityLabel="Close action sheet" className="flex-1" onPress={closeWithAnimation} />
+          <GestureDetector gesture={panGesture}>
+            <Animated.View style={sheetStyle}>
+              <SafeAreaView className="bg-background dark:bg-black" edges={["bottom"]}>
+                <View className="rounded-t-lg border-t border-border bg-background px-3 pb-2 pt-2 dark:border-neutral-800 dark:bg-black">
+                  <View className="mb-2 items-center py-1">
+                    <View className="h-1 w-10 rounded-full bg-muted dark:bg-slate-700" />
+                  </View>
 
-                <View className="mb-2 px-1">
-                  <View className="gap-1">
-                    <Text className="text-lg font-bold text-foreground dark:text-slate-100" numberOfLines={2}>
-                      {title}
-                    </Text>
-                    {description ? (
-                      <Text className="text-sm text-muted-foreground dark:text-slate-400" numberOfLines={3}>
-                        {description}
+                  <View className="mb-2 px-1">
+                    <View className="gap-1">
+                      <Text className="text-lg font-bold text-foreground dark:text-slate-100" numberOfLines={2}>
+                        {title}
                       </Text>
-                    ) : null}
+                      {description ? (
+                        <Text className="text-sm text-muted-foreground dark:text-slate-400" numberOfLines={3}>
+                          {description}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  <View className="gap-1">
+                    {actions.map((action) => {
+                      const Icon = action.icon;
+                      const color = action.destructive ? "#dc2626" : colors.foreground;
+
+                      return (
+                        <Pressable
+                          key={action.label}
+                          accessibilityRole="button"
+                          accessibilityLabel={action.accessibilityLabel ?? action.label}
+                          className={cn("h-12 flex-row items-center gap-3 rounded-md px-3", action.disabled ? "opacity-50" : "active:bg-muted dark:active:bg-slate-800")}
+                          disabled={action.disabled}
+                          onPress={() => {
+                            closeWithAnimation();
+                            action.onPress();
+                          }}
+                        >
+                          {Icon ? <Icon color={color} size={19} /> : null}
+                          <Text className={cn("text-base font-semibold", action.destructive ? "text-red-600 dark:text-red-400" : "text-foreground dark:text-slate-100")}>{action.label}</Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
                 </View>
-
-                <View className="gap-1">
-                  {actions.map((action) => {
-                    const Icon = action.icon;
-                    const color = action.destructive ? "#dc2626" : colors.foreground;
-
-                    return (
-                      <Pressable
-                        key={action.label}
-                        accessibilityRole="button"
-                        accessibilityLabel={action.accessibilityLabel ?? action.label}
-                        className={cn("h-12 flex-row items-center gap-3 rounded-md px-3", action.disabled ? "opacity-50" : "active:bg-muted dark:active:bg-slate-800")}
-                        disabled={action.disabled}
-                        onPress={() => {
-                          closeWithAnimation();
-                          action.onPress();
-                        }}
-                      >
-                        {Icon ? <Icon color={color} size={19} /> : null}
-                        <Text className={cn("text-base font-semibold", action.destructive ? "text-red-600 dark:text-red-400" : "text-foreground dark:text-slate-100")}>{action.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-            </SafeAreaView>
-          </Animated.View>
-        </GestureDetector>
-      </View>
+              </SafeAreaView>
+            </Animated.View>
+          </GestureDetector>
+        </View>
       </GestureHandlerRootView>
     </Modal>
   );
