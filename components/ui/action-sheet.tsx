@@ -3,6 +3,7 @@ import { Modal, Pressable, Text, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { shouldDismissActionSheet } from "@/components/ui/action-sheet-gesture";
 import { cn } from "@/lib/cn";
 import { useTheme } from "@/theme/theme";
 
@@ -48,9 +49,7 @@ export function ActionSheet({ actions, description, onClose, title, visible }: A
     if (visible) {
       setMounted(true);
       translateY.value = CLOSED_OFFSET;
-      requestAnimationFrame(() => {
-        translateY.value = withTiming(0, { duration: 170, easing: Easing.out(Easing.cubic) });
-      });
+      translateY.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.cubic) });
       return;
     }
 
@@ -73,8 +72,7 @@ export function ActionSheet({ actions, description, onClose, title, visible }: A
           translateY.value = Math.max(0, dragStartY.value + event.translationY);
         })
         .onEnd((event) => {
-          const projected = translateY.value + event.velocityY * 0.12;
-          const shouldDismiss = event.velocityY > 650 || projected > 96;
+          const shouldDismiss = shouldDismissActionSheet({ translateY: translateY.value, velocityY: event.velocityY });
 
           if (shouldDismiss) {
             translateY.value = withTiming(CLOSED_OFFSET, { duration: 150, easing: Easing.out(Easing.cubic) }, (finished) => {
@@ -99,11 +97,11 @@ export function ActionSheet({ actions, description, onClose, title, visible }: A
   }
 
   return (
-    <Modal animationType="fade" onRequestClose={closeWithAnimation} transparent visible={mounted}>
+    <Modal animationType="none" onRequestClose={closeWithAnimation} transparent visible={mounted}>
       <GestureHandlerRootView className="flex-1">
-        <View className="flex-1 justify-end bg-black/45">
-          <Pressable accessibilityRole="button" accessibilityLabel="Close action sheet" className="flex-1" onPress={closeWithAnimation} />
-          <GestureDetector gesture={panGesture}>
+        <GestureDetector gesture={panGesture}>
+          <View className="flex-1 justify-end bg-black/45">
+            <Pressable accessibilityRole="button" accessibilityLabel="Close action sheet" className="flex-1" onPress={closeWithAnimation} />
             <Animated.View style={sheetStyle}>
               <SafeAreaView className="bg-background dark:bg-black" edges={["bottom"]}>
                 <View className="rounded-t-lg border-t border-border bg-background px-3 pb-2 pt-2 dark:border-neutral-800 dark:bg-black">
@@ -150,8 +148,8 @@ export function ActionSheet({ actions, description, onClose, title, visible }: A
                 </View>
               </SafeAreaView>
             </Animated.View>
-          </GestureDetector>
-        </View>
+          </View>
+        </GestureDetector>
       </GestureHandlerRootView>
     </Modal>
   );
