@@ -4,6 +4,7 @@ import type {
   AgentContextReference,
   AgentDecision,
   AgentDetail,
+  AgentProfile,
   AgentStatus,
   AgentSummary,
   AgentTimelineEvent,
@@ -28,6 +29,8 @@ export function mapAgentSummary(item: unknown): AgentSummary {
   return {
     id,
     name: stringValue(agent.name) ?? stringValue(agent.title) ?? "Agent",
+    profileId: stringValue(agent.profileId) ?? stringValue(agent.profile_id) ?? stringValue(asRecord(agent.profile).id),
+    profileName: stringValue(agent.profileName) ?? stringValue(agent.profile_name) ?? stringValue(asRecord(agent.profile).name),
     objective: stringValue(agent.objective) ?? stringValue(agent.goal),
     status,
     location: stringValue(agent.location) ?? stringValue(agent.host) ?? stringValue(agent.workspace),
@@ -44,6 +47,59 @@ export function mapAgentList(result: unknown): AgentSummary[] {
   const source = Array.isArray(result) ? result : Array.isArray(asRecord(result).agents) ? (asRecord(result).agents as unknown[]) : [];
   return source.map(mapAgentSummary).filter((agent) => agent.id);
 }
+
+export function mapAgentProfile(item: unknown): AgentProfile {
+  const profile = asRecord(item);
+  return {
+    id: stringValue(profile.id) ?? stringValue(profile.profileId) ?? "",
+    name: stringValue(profile.name) ?? stringValue(profile.title) ?? "Agent profile",
+    description: stringValue(profile.description) ?? stringValue(profile.summary),
+    role: stringValue(profile.role) ?? stringValue(profile.persona),
+    runtime: stringValue(profile.runtime) ?? stringValue(profile.model) ?? stringValue(profile.engine),
+    location: stringValue(profile.location) ?? stringValue(profile.workspace),
+    capabilities: stringList(profile.capabilities ?? profile.skills),
+    defaultObjective: stringValue(profile.defaultObjective) ?? stringValue(profile.default_objective)
+  };
+}
+
+export function mapAgentProfileList(result: unknown): AgentProfile[] {
+  const source = Array.isArray(result) ? result : Array.isArray(asRecord(result).profiles) ? (asRecord(result).profiles as unknown[]) : [];
+  const profiles = source.map(mapAgentProfile).filter((profile) => profile.id);
+  return profiles.length ? profiles : defaultAgentProfiles;
+}
+
+export const defaultAgentProfiles: AgentProfile[] = [
+  {
+    id: "operator",
+    name: "Operator",
+    description: "Tracks active work, escalates blockers, and keeps the blackboard current.",
+    role: "Operations",
+    runtime: "Nexus",
+    location: "Control plane",
+    capabilities: ["monitoring", "status updates", "escalation"],
+    defaultObjective: "Monitor the current workstream and surface anything that needs attention."
+  },
+  {
+    id: "researcher",
+    name: "Researcher",
+    description: "Collects context, compares sources, and records decisions on the blackboard.",
+    role: "Discovery",
+    runtime: "Nexus",
+    location: "Knowledge graph",
+    capabilities: ["context gathering", "summaries", "references"],
+    defaultObjective: "Research the requested topic and keep findings organized on the blackboard."
+  },
+  {
+    id: "builder",
+    name: "Builder",
+    description: "Executes implementation steps and reports progress, artifacts, and blockers.",
+    role: "Execution",
+    runtime: "Workbench",
+    location: "Operator console",
+    capabilities: ["planning", "implementation", "artifact tracking"],
+    defaultObjective: "Execute the requested implementation plan and report progress as blackboard updates."
+  }
+];
 
 export function mapAgentDetail(result: unknown): AgentDetail {
   const source = asRecord(result);

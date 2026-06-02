@@ -42,6 +42,7 @@ export const appConfig = {
   },
   agents: {
     list: "/api/v1/agents",
+    profiles: "/api/v1/agents/profiles",
     detail: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}`,
     messages: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/messages`,
     pause: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/pause`,

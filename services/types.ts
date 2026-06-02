@@ -240,6 +240,17 @@ export type AgentDecision = {
   createdAt?: string;
 };
 
+export type AgentProfile = {
+  id: string;
+  name: string;
+  description?: string;
+  role?: string;
+  runtime?: string;
+  location?: string;
+  capabilities: string[];
+  defaultObjective?: string;
+};
+
 export type AgentBlackboard = {
   objective?: string;
   plan: string[];
@@ -268,6 +279,8 @@ export type AgentApprovalRequest = {
 export type AgentSummary = {
   id: string;
   name: string;
+  profileId?: string;
+  profileName?: string;
   objective?: string;
   status: AgentStatus;
   location?: string;
@@ -299,6 +312,7 @@ export type AgentDetail = AgentSummary & {
 
 export type AgentSpawnRequest = {
   objective: string;
+  profileId?: string;
   runtime?: string;
   location?: string;
 };

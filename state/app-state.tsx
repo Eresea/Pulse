@@ -1,14 +1,14 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState as RNAppState } from "react-native";
 import { aiDebugLog, createAiTraceId } from "@/services/ai-debug-log";
-import { agentService, mapAgentApproval, mapAgentDetail, mapAgentSummary, mapAgentTimelineEvent } from "@/services/agents";
+import { agentService, defaultAgentProfiles, mapAgentApproval, mapAgentDetail, mapAgentSummary, mapAgentTimelineEvent } from "@/services/agents";
 import { aiChatService } from "@/services/ai-chat";
 import { authService } from "@/services/auth";
 import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
 import { realtimeService } from "@/services/realtime";
 import { updateService } from "@/services/updates";
-import type { AgentApprovalRequest, AgentDetail, AgentInstructionRequest, AgentSpawnRequest, AgentStatus, AgentSummary, AgentTimelineEvent, AiChatAttachment, AiChatFile, AiChatMessage, AiChatModel, AiChatThread, AiChatTimelineEvent, AiDebugLogEntry, ConnectorCatalogItem, RootsEvent, ServiceStatus, UserInfo } from "@/services/types";
+import type { AgentApprovalRequest, AgentDetail, AgentInstructionRequest, AgentProfile, AgentSpawnRequest, AgentStatus, AgentSummary, AgentTimelineEvent, AiChatAttachment, AiChatFile, AiChatMessage, AiChatModel, AiChatThread, AiChatTimelineEvent, AiDebugLogEntry, ConnectorCatalogItem, RootsEvent, ServiceStatus, UserInfo } from "@/services/types";
 
 type AppState = {
   session: {
@@ -52,9 +52,11 @@ type AppState = {
   };
   agents: {
     items: AgentSummary[];
+    profiles: AgentProfile[];
     detailsById: Record<string, AgentDetail>;
     pendingApprovals: AgentApprovalRequest[];
     isLoading: boolean;
+    apiUnavailable: boolean;
     loadingAgentId?: string;
     error?: string;
   };
@@ -82,6 +84,7 @@ type AppState = {
     renameAiThread: (threadId: string, title: string) => Promise<AiChatThread>;
     respondToAiConfirmation: (confirmationId: string, accepted: boolean) => Promise<void>;
     loadAgents: () => Promise<AgentSummary[]>;
+    loadAgentProfiles: () => Promise<AgentProfile[]>;
     loadAgentDetail: (agentId: string) => Promise<AgentDetail>;
     spawnAgent: (request: AgentSpawnRequest) => Promise<AgentDetail>;
     pauseAgent: (agentId: string) => Promise<void>;
@@ -122,9 +125,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [aiChatError, setAiChatError] = useState<string | undefined>();
   const [aiDebugLogs, setAiDebugLogs] = useState<AiDebugLogEntry[]>([]);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>(defaultAgentProfiles);
   const [agentDetailsById, setAgentDetailsById] = useState<Record<string, AgentDetail>>({});
   const [pendingAgentApprovals, setPendingAgentApprovals] = useState<AgentApprovalRequest[]>([]);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
+  const [agentApiUnavailable, setAgentApiUnavailable] = useState(false);
   const [loadingAgentId, setLoadingAgentId] = useState<string | undefined>();
   const [agentsError, setAgentsError] = useState<string | undefined>();
   const userRefreshPromise = useRef<Promise<UserInfo> | null>(null);
@@ -132,6 +137,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const aiModelsPromise = useRef<Promise<AiChatModel[]> | null>(null);
   const aiThreadsPromise = useRef<Promise<AiChatThread[]> | null>(null);
   const agentsPromise = useRef<Promise<AgentSummary[]> | null>(null);
+  const agentProfilesPromise = useRef<Promise<AgentProfile[]> | null>(null);
   const autoUpdateStarted = useRef(false);
   const bootstrappedUserId = useRef<string | undefined>(undefined);
   const pushRefreshUnsubscribe = useRef<(() => void) | undefined>(undefined);
@@ -259,6 +265,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     void loadAiModelsAction().catch(() => undefined);
     void loadAiThreadsAction().catch(() => undefined);
     void refreshConnectorsAction().catch(() => undefined);
+    void loadAgentProfilesAction().catch(() => undefined);
     void loadAgentsAction().catch(() => undefined);
   };
 
@@ -275,10 +282,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const clearAgentState = () => {
     setAgents([]);
+    setAgentProfiles(defaultAgentProfiles);
     setAgentDetailsById({});
     setPendingAgentApprovals([]);
+    setAgentApiUnavailable(false);
     setAgentsError(undefined);
     agentsPromise.current = null;
+    agentProfilesPromise.current = null;
   };
 
   const refreshConnectorsAction = async () => {
@@ -365,10 +375,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       agentsPromise.current = agentService
         .listAgents()
         .then((nextAgents) => {
+          setAgentApiUnavailable(false);
           setAgents(nextAgents);
           return nextAgents;
         })
         .catch((err) => {
+          if (isAgentApiUnavailableError(err)) {
+            setAgentApiUnavailable(true);
+            setAgentsError(undefined);
+            return [];
+          }
           setAgentsError(err instanceof Error ? err.message : "Could not load agents.");
           throw err;
         })
@@ -378,6 +394,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         });
     }
     return agentsPromise.current;
+  };
+
+  const loadAgentProfilesAction = async () => {
+    if (!agentProfilesPromise.current) {
+      agentProfilesPromise.current = agentService
+        .listProfiles()
+        .then((profiles) => {
+          setAgentProfiles(profiles);
+          return profiles;
+        })
+        .catch(() => defaultAgentProfiles)
+        .finally(() => {
+          agentProfilesPromise.current = null;
+        });
+    }
+    return agentProfilesPromise.current;
   };
 
   const handleAgentRealtimeEvent = (event: RootsEvent) => {
@@ -503,6 +535,37 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setLocalAgentStatus = (agentId: string, status: AgentStatus) => {
+    const now = new Date().toISOString();
+    const label = status === "running" ? "Local draft resumed" : status === "paused" ? "Local draft paused" : "Local draft stopped";
+    setAgents((current) => touchAgentSummary(current, agentId, { status, lastUpdate: label, updatedAt: now }));
+    setAgentDetailsById((current) => {
+      const detail = current[agentId];
+      if (!detail) {
+        return current;
+      }
+      return {
+        ...current,
+        [agentId]: {
+          ...detail,
+          status,
+          lastUpdate: label,
+          updatedAt: now,
+          timeline: mergeAgentTimelineEvents(detail.timeline, [
+            {
+              id: `${agentId}-${status}-${Date.now()}`,
+              agentId,
+              type: "log",
+              title: label,
+              body: "This update is local because Nexus has not exposed the agent control API yet.",
+              createdAt: now
+            }
+          ])
+        }
+      };
+    });
+  };
+
   const value = useMemo<AppState>(
     () => ({
       session: {
@@ -546,9 +609,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       },
       agents: {
         items: agents,
+        profiles: agentProfiles,
         detailsById: agentDetailsById,
         pendingApprovals: pendingAgentApprovals,
         isLoading: isLoadingAgents,
+        apiUnavailable: agentApiUnavailable,
         loadingAgentId,
         error: agentsError
       },
@@ -714,6 +779,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         loadAgents: async () => {
           return loadAgentsAction();
         },
+        loadAgentProfiles: async () => {
+          return loadAgentProfilesAction();
+        },
         loadAgentDetail: async (agentId: string) => {
           setLoadingAgentId(agentId);
           setAgentsError(undefined);
@@ -730,17 +798,41 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         },
         spawnAgent: async (request: AgentSpawnRequest) => {
           setAgentsError(undefined);
-          const detail = await agentService.spawnAgent(request);
-          mergeAgentDetailState(detail);
-          return detail;
+          try {
+            const detail = await agentService.spawnAgent(request);
+            setAgentApiUnavailable(false);
+            mergeAgentDetailState(detail);
+            return detail;
+          } catch (err) {
+            if (isAgentApiUnavailableError(err)) {
+              setAgentApiUnavailable(true);
+              const detail = createLocalAgentDetail(request, agentProfiles);
+              mergeAgentDetailState(detail);
+              return detail;
+            }
+            setAgentsError(err instanceof Error ? err.message : "Could not spawn agent.");
+            throw err;
+          }
         },
         pauseAgent: async (agentId: string) => {
+          if (isLocalAgentId(agentId)) {
+            setLocalAgentStatus(agentId, "paused");
+            return;
+          }
           await runAgentControl(agentId, "paused", () => agentService.pauseAgent(agentId));
         },
         resumeAgent: async (agentId: string) => {
+          if (isLocalAgentId(agentId)) {
+            setLocalAgentStatus(agentId, "running");
+            return;
+          }
           await runAgentControl(agentId, "running", () => agentService.resumeAgent(agentId));
         },
         stopAgent: async (agentId: string) => {
+          if (isLocalAgentId(agentId)) {
+            setLocalAgentStatus(agentId, "completed");
+            return;
+          }
           await runAgentControl(agentId, "completed", () => agentService.stopAgent(agentId));
         },
         sendAgentInstruction: async (agentId: string, request: AgentInstructionRequest) => {
@@ -754,6 +846,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             createdAt: new Date().toISOString()
           };
           appendAgentTimelineState(optimisticEvent);
+          if (isLocalAgentId(agentId)) {
+            return;
+          }
           try {
             const event = await agentService.sendInstruction(agentId, request);
             if (event) {
@@ -936,7 +1031,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     // Action closures intentionally capture the current state snapshot used by optimistic UI updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [agentDetailsById, agents, agentsError, aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, aiTimelineEventsByThread, availableUpdate, connectors, connectorsError, connectorsLoading, isLoadingAgents, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAgentId, loadingAiThreadId, pendingAgentApprovals, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
+    [agentApiUnavailable, agentDetailsById, agents, agentsError, aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, aiTimelineEventsByThread, availableUpdate, connectors, connectorsError, connectorsLoading, isLoadingAgents, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAgentId, loadingAiThreadId, pendingAgentApprovals, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
@@ -1082,6 +1177,60 @@ function updateDetailApproval(current: Record<string, AgentDetail>, approval: Ag
       approvals: mergeApprovalList(detail.approvals, [approval])
     }
   };
+}
+
+function createLocalAgentDetail(request: AgentSpawnRequest, profiles: AgentProfile[]): AgentDetail {
+  const now = new Date().toISOString();
+  const id = `local-agent-${Date.now()}`;
+  const profile = profiles.find((item) => item.id === request.profileId) ?? profiles[0] ?? defaultAgentProfiles[0];
+  return {
+    id,
+    name: profile.name,
+    profileId: profile.id,
+    profileName: profile.name,
+    objective: request.objective || profile.defaultObjective,
+    status: "idle",
+    location: request.location ?? profile.location ?? "Pulse",
+    runtime: request.runtime ?? profile.runtime ?? "Pending Nexus",
+    needsAttention: false,
+    lastUpdate: "Draft created locally. Nexus agent API is not available yet.",
+    updatedAt: now,
+    blackboard: {
+      objective: request.objective || profile.defaultObjective,
+      plan: [
+        `Use the ${profile.name} blackboard profile`,
+        ...(profile.capabilities.length ? profile.capabilities.map((capability) => `Apply ${capability}`) : ["Track progress and decisions"]),
+        "Sync this objective when the Nexus agent API is available"
+      ],
+      activeStep: "Draft is staged in Pulse",
+      decisions: profile.role ? [{ id: `${id}-profile`, title: `Selected ${profile.name}`, rationale: profile.role, createdAt: now }] : [],
+      blockers: ["Nexus returned not found for the agent API contract"],
+      artifacts: [],
+      contextReferences: profile.description ? [{ id: `${id}-profile-reference`, title: profile.name, type: "profile", summary: profile.description }] : [],
+      recentUpdates: [`Pulse staged this as a ${profile.name} profile draft.`],
+      updatedAt: now
+    },
+    approvals: [],
+    timeline: [
+      {
+        id: `${id}-created`,
+        agentId: id,
+        type: "blackboard",
+        title: "Draft agent created",
+        body: "Pulse kept this spawn request locally because Nexus has not exposed /api/v1/agents yet.",
+        createdAt: now
+      }
+    ]
+  };
+}
+
+function isLocalAgentId(agentId: string) {
+  return agentId.startsWith("local-agent-");
+}
+
+function isAgentApiUnavailableError(err: unknown) {
+  const message = err instanceof Error ? err.message : String(err);
+  return /404|not found|not_found/i.test(message);
 }
 
 function titleFromPrompt(content: string) {

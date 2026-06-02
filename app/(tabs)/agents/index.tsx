@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
-import { AlertCircle, Bot, ChevronRight, CirclePause, Clock3, OctagonAlert, Play, RefreshCcw, ShieldAlert, Square } from "lucide-react-native";
+import { AlertCircle, Bot, ChevronRight, CirclePause, Clock3, OctagonAlert, Play, RefreshCcw, ServerOff, ShieldAlert, Square } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/drawer-shell";
 import { Screen, ScreenScrollView } from "@/components/screen";
@@ -21,13 +21,17 @@ export default function AgentsScreen() {
   const { colors } = useTheme();
   const [spawnOpen, setSpawnOpen] = useState(false);
   const [objective, setObjective] = useState("");
+  const [selectedProfileId, setSelectedProfileId] = useState<string | undefined>();
   const [spawning, setSpawning] = useState(false);
   const [respondingApprovalId, setRespondingApprovalId] = useState<string | undefined>();
   const didLoad = useRef(false);
 
   const loadAgents = useCallback(() => {
+    void actions.loadAgentProfiles().catch(() => undefined);
     void actions.loadAgents().catch(() => undefined);
   }, [actions]);
+
+  const selectedProfile = agents.profiles.find((profile) => profile.id === selectedProfileId) ?? agents.profiles[0];
 
   useEffect(() => {
     if (didLoad.current) {
@@ -51,7 +55,12 @@ export default function AgentsScreen() {
     }
     setSpawning(true);
     try {
-      const detail = await actions.spawnAgent({ objective: trimmed });
+      const detail = await actions.spawnAgent({
+        objective: trimmed,
+        profileId: selectedProfile?.id,
+        runtime: selectedProfile?.runtime,
+        location: selectedProfile?.location
+      });
       setObjective("");
       setSpawnOpen(false);
       router.push(agentHref(detail.id));
@@ -95,10 +104,28 @@ export default function AgentsScreen() {
               <Metric label="Failed" value={counts.failed} danger={counts.failed > 0} />
             </View>
             <Button className="h-12" onPress={() => setSpawnOpen(true)}>
-              Quick spawn
+              {spawnOpen ? "Compose spawn" : "Quick spawn"}
             </Button>
           </CardContent>
         </Card>
+
+        {agents.apiUnavailable ? (
+          <Card>
+            <CardContent className="gap-3 p-4">
+              <View className="flex-row items-start gap-3">
+                <View className="size-10 items-center justify-center rounded-full bg-muted dark:bg-slate-800">
+                  <ServerOff color={colors.icon} size={19} />
+                </View>
+                <View className="min-w-0 flex-1 gap-1">
+                  <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Nexus agent API pending</Text>
+                  <Text className="text-sm text-muted-foreground dark:text-slate-400">
+                    Pulse will stage spawned agents locally until Nexus exposes the agent endpoints.
+                  </Text>
+                </View>
+              </View>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {spawnOpen ? (
           <Card>
@@ -106,10 +133,38 @@ export default function AgentsScreen() {
               <CardTitle>Quick Spawn</CardTitle>
             </CardHeader>
             <CardContent className="gap-3">
+              <View className="gap-2">
+                <Text className="text-xs font-semibold uppercase text-muted-foreground dark:text-slate-400">Blackboard profile</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {agents.profiles.map((profile) => (
+                    <Pressable
+                      key={profile.id}
+                      accessibilityRole="button"
+                      className={cn("rounded-md border border-border px-3 py-2 dark:border-neutral-800", selectedProfile?.id === profile.id ? "bg-primary" : "bg-background dark:bg-black")}
+                      onPress={() => {
+                        setSelectedProfileId(profile.id);
+                        if (!objective.trim() && profile.defaultObjective) {
+                          setObjective(profile.defaultObjective);
+                        }
+                      }}
+                    >
+                      <Text className={cn("text-xs font-semibold", selectedProfile?.id === profile.id ? "text-primary-foreground" : "text-foreground dark:text-slate-100")}>{profile.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {selectedProfile?.description ? <Text className="text-sm text-muted-foreground dark:text-slate-400">{selectedProfile.description}</Text> : null}
+                {selectedProfile?.capabilities.length ? (
+                  <View className="flex-row flex-wrap gap-1">
+                    {selectedProfile.capabilities.slice(0, 4).map((capability) => (
+                      <Badge key={capability} variant="outline">{capability}</Badge>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
               <Input icon={Bot} label="Objective" placeholder="What should this agent do?" value={objective} onChangeText={setObjective} returnKeyType="done" />
               <View className="flex-row gap-2">
                 <Button className="flex-1" disabled={spawning || !objective.trim()} onPress={() => void spawnAgent()}>
-                  {spawning ? "Spawning..." : "Spawn"}
+                  {spawning ? "Staging..." : agents.apiUnavailable ? "Stage draft" : "Spawn"}
                 </Button>
                 <Button className="flex-1" disabled={spawning} variant="outline" onPress={() => setSpawnOpen(false)}>
                   Cancel
@@ -119,7 +174,7 @@ export default function AgentsScreen() {
           </Card>
         ) : null}
 
-        {agents.error ? (
+        {agents.error && !agents.apiUnavailable ? (
           <View className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-950 dark:bg-red-950/40">
             <Text className="text-sm text-red-700 dark:text-red-200">{agents.error}</Text>
           </View>
@@ -159,8 +214,10 @@ export default function AgentsScreen() {
             ) : (
               <View className="items-center gap-2 rounded-md border border-dashed border-border bg-background p-5 dark:border-neutral-800 dark:bg-black">
                 <Bot color={colors.muted} size={24} />
-                <Text className="text-sm font-medium text-foreground dark:text-slate-100">No agents running</Text>
-                <Text className="text-center text-sm text-muted-foreground dark:text-slate-400">Spawn an agent when you need Pulse to watch or steer autonomous work.</Text>
+                <Text className="text-sm font-medium text-foreground dark:text-slate-100">{agents.apiUnavailable ? "No staged agents" : "No agents running"}</Text>
+                <Text className="text-center text-sm text-muted-foreground dark:text-slate-400">
+                  {agents.apiUnavailable ? "Create a local draft to preserve the objective until Nexus is ready." : "Spawn an agent when you need Pulse to watch or steer autonomous work."}
+                </Text>
                 <Button className="mt-1" onPress={() => setSpawnOpen(true)}>
                   Spawn agent
                 </Button>
@@ -199,6 +256,7 @@ function AgentRow({ agent }: { agent: AgentSummary }) {
               {agent.needsAttention ? <AlertCircle color="#d97706" size={15} /> : null}
             </View>
             <Text className="text-sm text-muted-foreground dark:text-slate-400" numberOfLines={2}>{agent.objective ?? "No objective reported"}</Text>
+            {agent.profileName ? <Text className="text-xs font-semibold text-primary" numberOfLines={1}>{agent.profileName}</Text> : null}
             <Text className="text-xs text-muted-foreground dark:text-slate-500" numberOfLines={1}>{[agent.location, agent.runtime, progress].filter(Boolean).join(" - ")}</Text>
           </View>
         </View>

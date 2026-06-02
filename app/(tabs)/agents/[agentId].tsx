@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
-import type { AgentApprovalRequest, AgentDetail, AgentStatus, AgentSummary, AgentTimelineEvent, AgentTimelineEventType } from "@/services/types";
+import type { AgentApprovalRequest, AgentDetail, AgentProfile, AgentStatus, AgentSummary, AgentTimelineEvent, AgentTimelineEventType } from "@/services/types";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 
@@ -35,6 +35,7 @@ export default function AgentDetailScreen() {
   const didLoad = useRef(false);
   const detail = agentId ? agents.detailsById[agentId] : undefined;
   const summary = agentId ? agents.items.find((agent) => agent.id === agentId) : undefined;
+  const profile = agents.profiles.find((item) => item.id === (detail?.profileId ?? summary?.profileId));
   const visibleEvents = useMemo(() => {
     const events = detail?.timeline ?? [];
     return activeTab === "all" ? events : events.filter((event) => event.type === activeTab);
@@ -99,6 +100,7 @@ export default function AgentDetailScreen() {
   };
 
   const displayAgent = detail ?? summary;
+  const isLocalDraft = Boolean(agentId?.startsWith("local-agent-"));
 
   return (
     <Screen>
@@ -121,6 +123,17 @@ export default function AgentDetailScreen() {
           </View>
         ) : null}
 
+        {isLocalDraft ? (
+          <Card>
+            <CardContent className="gap-2 p-4">
+              <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Local draft</Text>
+              <Text className="text-sm text-muted-foreground dark:text-slate-400">
+                This agent is staged in Pulse because Nexus has not exposed the agent API yet. Commands update the draft locally.
+              </Text>
+            </CardContent>
+          </Card>
+        ) : null}
+
         {!displayAgent && agents.loadingAgentId === agentId ? (
           <View className="flex-row items-center gap-2 py-6">
             <ActivityIndicator color={colors.icon} />
@@ -131,6 +144,7 @@ export default function AgentDetailScreen() {
             <AgentHeader agent={displayAgent} onRefresh={loadDetail} />
             {detail ? (
               <>
+                <ProfileCard detail={detail} profile={profile} />
                 <BlackboardCard detail={detail} />
                 {detail.approvals.filter((approval) => approval.status === "pending").length ? (
                   <Card>
@@ -152,9 +166,9 @@ export default function AgentDetailScreen() {
                     <CardTitle>Command</CardTitle>
                   </CardHeader>
                   <CardContent className="gap-3">
-                    <Input icon={MessageSquare} label="Instruction" placeholder="Send an instruction or correction" value={instruction} onChangeText={setInstruction} returnKeyType="send" onSubmitEditing={() => void sendInstruction()} />
+                    <Input icon={MessageSquare} label="Instruction" placeholder={isLocalDraft ? "Add a local instruction note" : "Send an instruction or correction"} value={instruction} onChangeText={setInstruction} returnKeyType="send" onSubmitEditing={() => void sendInstruction()} />
                     <Button disabled={sending || !instruction.trim()} onPress={() => void sendInstruction()}>
-                      {sending ? "Sending..." : "Send instruction"}
+                      {sending ? "Sending..." : isLocalDraft ? "Add note" : "Send instruction"}
                     </Button>
                   </CardContent>
                 </Card>
@@ -214,7 +228,7 @@ export default function AgentDetailScreen() {
             onPress: () => void runControl("stop")
           }
         ]}
-        description="Controls are sent to Nexus and reflected here optimistically."
+        description={isLocalDraft ? "Controls update this staged draft locally." : "Controls are sent to Nexus and reflected here optimistically."}
         onClose={() => setActionSheetOpen(false)}
         title={displayAgent?.name ?? "Agent controls"}
         visible={actionSheetOpen}
@@ -277,6 +291,35 @@ function BlackboardCard({ detail }: { detail: AgentDetail }) {
                 <Text className="text-sm font-semibold text-foreground dark:text-slate-100">{decision.title}</Text>
                 {decision.rationale ? <Text className="text-sm text-muted-foreground dark:text-slate-400">{decision.rationale}</Text> : null}
               </View>
+            ))}
+          </View>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ProfileCard({ detail, profile }: { detail: AgentDetail; profile?: AgentProfile }) {
+  const capabilities = profile?.capabilities ?? [];
+  const name = profile?.name ?? detail.profileName;
+  if (!name && !capabilities.length) {
+    return null;
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Blackboard Profile</CardTitle>
+      </CardHeader>
+      <CardContent className="gap-3">
+        <View>
+          <Text className="text-sm font-semibold text-foreground dark:text-slate-100">{name ?? "Agent profile"}</Text>
+          {profile?.description ? <Text className="text-sm text-muted-foreground dark:text-slate-400">{profile.description}</Text> : null}
+        </View>
+        {profile?.role ? <Badge variant="secondary">{profile.role}</Badge> : null}
+        {capabilities.length ? (
+          <View className="flex-row flex-wrap gap-1">
+            {capabilities.map((capability) => (
+              <Badge key={capability} variant="outline">{capability}</Badge>
             ))}
           </View>
         ) : null}

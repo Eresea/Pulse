@@ -1,13 +1,24 @@
 import { appConfig } from "@/config/app-config";
-import { mapAgentApproval, mapAgentDetail, mapAgentList, mapAgentTimelineEvent } from "@/services/agents-mapper";
+import { defaultAgentProfiles, mapAgentApproval, mapAgentDetail, mapAgentList, mapAgentProfileList, mapAgentTimelineEvent } from "@/services/agents-mapper";
 import { rootsApi } from "@/services/roots-api";
-import type { AgentApprovalResponse, AgentDetail, AgentInstructionRequest, AgentSpawnRequest, AgentSummary, AgentTimelineEvent } from "@/services/types";
+import type { AgentApprovalResponse, AgentDetail, AgentInstructionRequest, AgentProfile, AgentSpawnRequest, AgentSummary, AgentTimelineEvent } from "@/services/types";
 
-export { mapAgentApproval, mapAgentDetail, mapAgentList, mapAgentSummary, mapAgentTimelineEvent, normalizeAgentStatus } from "@/services/agents-mapper";
+export { defaultAgentProfiles, mapAgentApproval, mapAgentDetail, mapAgentList, mapAgentProfile, mapAgentProfileList, mapAgentSummary, mapAgentTimelineEvent, normalizeAgentStatus } from "@/services/agents-mapper";
 
 export const agentService = {
   async listAgents(): Promise<AgentSummary[]> {
     return mapAgentList(await rootsApi.request(appConfig.agents.list));
+  },
+
+  async listProfiles(): Promise<AgentProfile[]> {
+    try {
+      return mapAgentProfileList(await rootsApi.request(appConfig.agents.profiles));
+    } catch (err) {
+      if (/404|not found|not_found/i.test(err instanceof Error ? err.message : String(err))) {
+        return defaultAgentProfiles;
+      }
+      throw err;
+    }
   },
 
   async getAgent(agentId: string): Promise<AgentDetail> {

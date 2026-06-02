@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mapAgentDetail, mapAgentList, mapAgentTimelineEvent, normalizeAgentStatus } from "@/services/agents-mapper";
+import { mapAgentDetail, mapAgentList, mapAgentProfileList, mapAgentTimelineEvent, normalizeAgentStatus } from "@/services/agents-mapper";
 
 describe("normalizeAgentStatus", () => {
   it("normalizes Nexus status variants into the Pulse status model", () => {
@@ -17,6 +17,7 @@ describe("mapAgentList", () => {
         {
           agent_id: "agent-1",
           title: "Release operator",
+          profile: { id: "operator", name: "Operator" },
           goal: "Ship the release",
           state: "running",
           workspace: "nexus",
@@ -36,6 +37,8 @@ describe("mapAgentList", () => {
       {
         id: "agent-1",
         name: "Release operator",
+        profileId: "operator",
+        profileName: "Operator",
         objective: "Ship the release",
         status: "running",
         location: "nexus",
@@ -49,6 +52,8 @@ describe("mapAgentList", () => {
       {
         id: "agent-2",
         name: "Reviewer",
+        profileId: undefined,
+        profileName: undefined,
         objective: undefined,
         status: "waiting_input",
         location: undefined,
@@ -60,6 +65,24 @@ describe("mapAgentList", () => {
         updatedAt: undefined
       }
     ]);
+  });
+});
+
+describe("mapAgentProfileList", () => {
+  it("maps blackboard agent profiles and falls back to defaults", () => {
+    assert.deepEqual(mapAgentProfileList({ profiles: [{ id: "operator", name: "Operator", persona: "Ops", skills: ["monitoring"] }] }), [
+      {
+        id: "operator",
+        name: "Operator",
+        description: undefined,
+        role: "Ops",
+        runtime: undefined,
+        location: undefined,
+        capabilities: ["monitoring"],
+        defaultObjective: undefined
+      }
+    ]);
+    assert.ok(mapAgentProfileList({ profiles: [] }).length > 0);
   });
 });
 
