@@ -1,13 +1,14 @@
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState as RNAppState } from "react-native";
 import { aiDebugLog, createAiTraceId } from "@/services/ai-debug-log";
+import { agentService, mapAgentApproval, mapAgentDetail, mapAgentSummary, mapAgentTimelineEvent } from "@/services/agents";
 import { aiChatService } from "@/services/ai-chat";
 import { authService } from "@/services/auth";
 import { pollingService } from "@/services/polling";
 import { pushService } from "@/services/push";
 import { realtimeService } from "@/services/realtime";
 import { updateService } from "@/services/updates";
-import type { AiChatAttachment, AiChatFile, AiChatMessage, AiChatModel, AiChatThread, AiChatTimelineEvent, AiDebugLogEntry, ConnectorCatalogItem, ServiceStatus, UserInfo } from "@/services/types";
+import type { AgentApprovalRequest, AgentDetail, AgentInstructionRequest, AgentSpawnRequest, AgentStatus, AgentSummary, AgentTimelineEvent, AiChatAttachment, AiChatFile, AiChatMessage, AiChatModel, AiChatThread, AiChatTimelineEvent, AiDebugLogEntry, ConnectorCatalogItem, RootsEvent, ServiceStatus, UserInfo } from "@/services/types";
 
 type AppState = {
   session: {
@@ -49,6 +50,14 @@ type AppState = {
     streamingThreadId?: string;
     error?: string;
   };
+  agents: {
+    items: AgentSummary[];
+    detailsById: Record<string, AgentDetail>;
+    pendingApprovals: AgentApprovalRequest[];
+    isLoading: boolean;
+    loadingAgentId?: string;
+    error?: string;
+  };
   aiDebug: {
     logs: AiDebugLogEntry[];
   };
@@ -72,6 +81,14 @@ type AppState = {
     deleteAiThread: (threadId: string) => Promise<void>;
     renameAiThread: (threadId: string, title: string) => Promise<AiChatThread>;
     respondToAiConfirmation: (confirmationId: string, accepted: boolean) => Promise<void>;
+    loadAgents: () => Promise<AgentSummary[]>;
+    loadAgentDetail: (agentId: string) => Promise<AgentDetail>;
+    spawnAgent: (request: AgentSpawnRequest) => Promise<AgentDetail>;
+    pauseAgent: (agentId: string) => Promise<void>;
+    resumeAgent: (agentId: string) => Promise<void>;
+    stopAgent: (agentId: string) => Promise<void>;
+    sendAgentInstruction: (agentId: string, request: AgentInstructionRequest) => Promise<void>;
+    respondToAgentApproval: (approvalId: string, accepted: boolean) => Promise<void>;
     sendAiMessage: (threadId: string, content: string, attachments?: AiChatAttachment[]) => Promise<void>;
     signOut: () => Promise<void>;
     uploadAiFile: (file: { uri: string; name: string; mimeType?: string }) => Promise<AiChatFile>;
@@ -104,10 +121,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [streamingAiThreadId, setStreamingAiThreadId] = useState<string | undefined>();
   const [aiChatError, setAiChatError] = useState<string | undefined>();
   const [aiDebugLogs, setAiDebugLogs] = useState<AiDebugLogEntry[]>([]);
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [agentDetailsById, setAgentDetailsById] = useState<Record<string, AgentDetail>>({});
+  const [pendingAgentApprovals, setPendingAgentApprovals] = useState<AgentApprovalRequest[]>([]);
+  const [isLoadingAgents, setIsLoadingAgents] = useState(false);
+  const [loadingAgentId, setLoadingAgentId] = useState<string | undefined>();
+  const [agentsError, setAgentsError] = useState<string | undefined>();
   const userRefreshPromise = useRef<Promise<UserInfo> | null>(null);
   const connectorsRefreshPromise = useRef<Promise<ConnectorCatalogItem[]> | null>(null);
   const aiModelsPromise = useRef<Promise<AiChatModel[]> | null>(null);
   const aiThreadsPromise = useRef<Promise<AiChatThread[]> | null>(null);
+  const agentsPromise = useRef<Promise<AgentSummary[]> | null>(null);
   const autoUpdateStarted = useRef(false);
   const bootstrappedUserId = useRef<string | undefined>(undefined);
   const pushRefreshUnsubscribe = useRef<(() => void) | undefined>(undefined);
@@ -134,6 +158,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return realtimeService.subscribe((event) => {
+      handleAgentRealtimeEvent(event);
       if (event.type === "WebSocketClosed") {
         const payload = event.payload as { code?: number; reason?: string; wasClean?: boolean };
         setRealtimeDetail(`closed ${payload.code ?? "unknown"}${payload.reason ? `: ${payload.reason}` : ""}`);
@@ -145,6 +170,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
       setRealtimeDetail(event.type);
     });
+  // handleAgentRealtimeEvent intentionally uses the current state merge closures.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -232,6 +259,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     void loadAiModelsAction().catch(() => undefined);
     void loadAiThreadsAction().catch(() => undefined);
     void refreshConnectorsAction().catch(() => undefined);
+    void loadAgentsAction().catch(() => undefined);
   };
 
   const clearAiState = () => {
@@ -243,6 +271,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setAiChatError(undefined);
     aiModelsPromise.current = null;
     aiThreadsPromise.current = null;
+  };
+
+  const clearAgentState = () => {
+    setAgents([]);
+    setAgentDetailsById({});
+    setPendingAgentApprovals([]);
+    setAgentsError(undefined);
+    agentsPromise.current = null;
   };
 
   const refreshConnectorsAction = async () => {
@@ -319,6 +355,154 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return aiThreadsPromise.current;
   };
 
+  const loadAgentsAction = async () => {
+    if (agents.length) {
+      return agents;
+    }
+    if (!agentsPromise.current) {
+      setIsLoadingAgents(true);
+      setAgentsError(undefined);
+      agentsPromise.current = agentService
+        .listAgents()
+        .then((nextAgents) => {
+          setAgents(nextAgents);
+          return nextAgents;
+        })
+        .catch((err) => {
+          setAgentsError(err instanceof Error ? err.message : "Could not load agents.");
+          throw err;
+        })
+        .finally(() => {
+          agentsPromise.current = null;
+          setIsLoadingAgents(false);
+        });
+    }
+    return agentsPromise.current;
+  };
+
+  const handleAgentRealtimeEvent = (event: RootsEvent) => {
+    if (!event.type.startsWith("agent.")) {
+      return;
+    }
+
+    if (event.type === "agent.status_changed") {
+      const summary = mapAgentSummary(event.payload);
+      if (summary.id) {
+        mergeAgentSummaryState(summary);
+      }
+      return;
+    }
+
+    if (event.type === "agent.blackboard_updated") {
+      const detail = mapAgentDetail(event.payload);
+      if (detail.id) {
+        mergeAgentDetailState(detail);
+      }
+      return;
+    }
+
+    if (event.type === "agent.timeline_event" || event.type === "agent.message_created") {
+      const timelineEvent = mapAgentTimelineEvent(event.payload, "");
+      if (timelineEvent.agentId) {
+        appendAgentTimelineState(timelineEvent);
+      }
+      return;
+    }
+
+    if (event.type === "agent.approval_requested") {
+      const approval = mapAgentApproval(event.payload);
+      if (approval.id) {
+        upsertAgentApprovalState(approval);
+      }
+      return;
+    }
+
+    if (event.type === "agent.approval_resolved") {
+      const approval = mapAgentApproval(event.payload);
+      if (approval.id) {
+        resolveAgentApprovalState(approval);
+      }
+    }
+  };
+
+  const mergeAgentSummaryState = (summary: AgentSummary) => {
+    setAgents((current) => mergeAgentSummaryList(current, summary));
+    setAgentDetailsById((current) => {
+      const existing = current[summary.id];
+      return existing ? { ...current, [summary.id]: { ...existing, ...summary } } : current;
+    });
+  };
+
+  const mergeAgentDetailState = (detail: AgentDetail) => {
+    setAgents((current) => mergeAgentSummaryList(current, detail));
+    setAgentDetailsById((current) => ({ ...current, [detail.id]: detail }));
+    setPendingAgentApprovals((current) => mergeApprovalList(current, detail.approvals.filter((approval) => approval.status === "pending")));
+  };
+
+  const appendAgentTimelineState = (event: AgentTimelineEvent) => {
+    setAgentDetailsById((current) => {
+      const detail = current[event.agentId];
+      if (!detail) {
+        return current;
+      }
+      return {
+        ...current,
+        [event.agentId]: {
+          ...detail,
+          timeline: mergeAgentTimelineEvents(detail.timeline, [event]),
+          lastUpdate: event.body ?? event.title,
+          updatedAt: event.createdAt
+        }
+      };
+    });
+    setAgents((current) => touchAgentSummary(current, event.agentId, { lastUpdate: event.body ?? event.title, updatedAt: event.createdAt }));
+  };
+
+  const upsertAgentApprovalState = (approval: AgentApprovalRequest) => {
+    setPendingAgentApprovals((current) => mergeApprovalList(current, [approval]).filter((item) => item.status === "pending"));
+    setAgentDetailsById((current) => {
+      const detail = current[approval.agentId];
+      if (!detail) {
+        return current;
+      }
+      return {
+        ...current,
+        [approval.agentId]: {
+          ...detail,
+          approvals: mergeApprovalList(detail.approvals, [approval]),
+          needsAttention: true,
+          status: detail.status === "running" ? "waiting_input" : detail.status
+        }
+      };
+    });
+    setAgents((current) => touchAgentSummary(current, approval.agentId, { needsAttention: true, status: "waiting_input", lastUpdate: approval.title, updatedAt: approval.requestedAt }));
+  };
+
+  const resolveAgentApprovalState = (approval: AgentApprovalRequest) => {
+    setPendingAgentApprovals((current) => current.filter((item) => item.id !== approval.id));
+    setAgentDetailsById((current) => updateDetailApproval(current, approval));
+  };
+
+  const runAgentControl = async (agentId: string, status: AgentStatus, action: () => Promise<AgentDetail | undefined>) => {
+    const previousAgents = agents;
+    const previousDetail = agentDetailsById[agentId];
+    setAgents((current) => touchAgentSummary(current, agentId, { status }));
+    setAgentDetailsById((current) => (current[agentId] ? { ...current, [agentId]: { ...current[agentId], status } } : current));
+    try {
+      const detail = await action();
+      if (detail) {
+        mergeAgentDetailState(detail);
+      }
+    } catch (err) {
+      setAgents(previousAgents);
+      if (previousDetail) {
+        setAgentDetailsById((current) => ({ ...current, [agentId]: previousDetail }));
+      }
+      setAgentsError(err instanceof Error ? err.message : "Could not update agent.");
+      throw err;
+    }
+  };
+
   const value = useMemo<AppState>(
     () => ({
       session: {
@@ -359,6 +543,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         loadingThreadId: loadingAiThreadId,
         streamingThreadId: streamingAiThreadId,
         error: aiChatError
+      },
+      agents: {
+        items: agents,
+        detailsById: agentDetailsById,
+        pendingApprovals: pendingAgentApprovals,
+        isLoading: isLoadingAgents,
+        loadingAgentId,
+        error: agentsError
       },
       aiDebug: {
         logs: aiDebugLogs
@@ -519,6 +711,79 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         respondToAiConfirmation: async (confirmationId: string, accepted: boolean) => {
           await aiChatService.respondToConfirmation(confirmationId, accepted);
         },
+        loadAgents: async () => {
+          return loadAgentsAction();
+        },
+        loadAgentDetail: async (agentId: string) => {
+          setLoadingAgentId(agentId);
+          setAgentsError(undefined);
+          try {
+            const detail = await agentService.getAgent(agentId);
+            mergeAgentDetailState(detail);
+            return detail;
+          } catch (err) {
+            setAgentsError(err instanceof Error ? err.message : "Could not load agent.");
+            throw err;
+          } finally {
+            setLoadingAgentId(undefined);
+          }
+        },
+        spawnAgent: async (request: AgentSpawnRequest) => {
+          setAgentsError(undefined);
+          const detail = await agentService.spawnAgent(request);
+          mergeAgentDetailState(detail);
+          return detail;
+        },
+        pauseAgent: async (agentId: string) => {
+          await runAgentControl(agentId, "paused", () => agentService.pauseAgent(agentId));
+        },
+        resumeAgent: async (agentId: string) => {
+          await runAgentControl(agentId, "running", () => agentService.resumeAgent(agentId));
+        },
+        stopAgent: async (agentId: string) => {
+          await runAgentControl(agentId, "completed", () => agentService.stopAgent(agentId));
+        },
+        sendAgentInstruction: async (agentId: string, request: AgentInstructionRequest) => {
+          setAgentsError(undefined);
+          const optimisticEvent: AgentTimelineEvent = {
+            id: `local-agent-message-${Date.now()}`,
+            agentId,
+            type: "message",
+            title: "Instruction sent",
+            body: request.message,
+            createdAt: new Date().toISOString()
+          };
+          appendAgentTimelineState(optimisticEvent);
+          try {
+            const event = await agentService.sendInstruction(agentId, request);
+            if (event) {
+              appendAgentTimelineState(event);
+            }
+          } catch (err) {
+            setAgentsError(err instanceof Error ? err.message : "Could not send instruction.");
+            throw err;
+          }
+        },
+        respondToAgentApproval: async (approvalId: string, accepted: boolean) => {
+          const previousApprovals = pendingAgentApprovals;
+          const approval = pendingAgentApprovals.find((item) => item.id === approvalId) ?? Object.values(agentDetailsById).flatMap((detail) => detail.approvals).find((item) => item.id === approvalId);
+          if (approval) {
+            resolveAgentApprovalState({ ...approval, status: accepted ? "approved" : "rejected" });
+          }
+          try {
+            const nextApproval = await agentService.respondToApproval(approvalId, {
+              accepted,
+              respondedAt: new Date().toISOString()
+            });
+            if (nextApproval) {
+              resolveAgentApprovalState(nextApproval);
+            }
+          } catch (err) {
+            setPendingAgentApprovals(previousApprovals);
+            setAgentsError(err instanceof Error ? err.message : "Could not respond to approval.");
+            throw err;
+          }
+        },
         sendAiMessage: async (threadId: string, content: string, attachments?: AiChatAttachment[]) => {
           const now = new Date().toISOString();
           const traceId = createAiTraceId();
@@ -662,6 +927,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           connectorsRefreshPromise.current = null;
           setPollingStatus("idle");
           clearAiState();
+          clearAgentState();
         },
         uploadAiFile: async (file) => {
           return aiChatService.uploadFile(file);
@@ -670,7 +936,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }),
     // Action closures intentionally capture the current state snapshot used by optimistic UI updates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, aiTimelineEventsByThread, availableUpdate, connectors, connectorsError, connectorsLoading, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAiThreadId, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
+    [agentDetailsById, agents, agentsError, aiChatError, aiDebugLogs, aiMessagesByThread, aiModels, aiThreads, aiTimelineEventsByThread, availableUpdate, connectors, connectorsError, connectorsLoading, isLoadingAgents, isLoadingAiModels, isLoadingAiThreads, isRestoringSession, loadingAgentId, loadingAiThreadId, pendingAgentApprovals, pollingStatus, pushPermission, pushToken, realtimeDetail, realtimeStatus, selectedAiModelId, streamingAiThreadId, updateStatus, user]
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
@@ -770,6 +1036,51 @@ function appendTimelineEvent(
   return {
     ...current,
     [threadId]: mergeTimelineEvents((current[threadId] ?? []).filter((item) => item.id !== eventId), [timelineEvent])
+  };
+}
+
+function mergeAgentSummaryList(current: AgentSummary[], incoming: AgentSummary) {
+  return [incoming, ...current.filter((agent) => agent.id !== incoming.id)].sort(sortAgents);
+}
+
+function touchAgentSummary(current: AgentSummary[], agentId: string, patch: Partial<AgentSummary>) {
+  return current.map((agent) => (agent.id === agentId ? compactAgentPatch(agent, patch) : agent)).sort(sortAgents);
+}
+
+function compactAgentPatch(agent: AgentSummary, patch: Partial<AgentSummary>) {
+  return {
+    ...agent,
+    ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined))
+  } as AgentSummary;
+}
+
+function sortAgents(a: AgentSummary, b: AgentSummary) {
+  const attentionDelta = Number(b.needsAttention) - Number(a.needsAttention);
+  if (attentionDelta !== 0) {
+    return attentionDelta;
+  }
+  return new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime();
+}
+
+function mergeApprovalList(current: AgentApprovalRequest[], incoming: AgentApprovalRequest[]) {
+  return [...incoming, ...current.filter((approval) => !incoming.some((item) => item.id === approval.id))].sort((a, b) => new Date(b.requestedAt ?? 0).getTime() - new Date(a.requestedAt ?? 0).getTime());
+}
+
+function mergeAgentTimelineEvents(current: AgentTimelineEvent[], incoming: AgentTimelineEvent[]) {
+  return [...incoming, ...current.filter((event) => !incoming.some((item) => item.id === event.id))].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+function updateDetailApproval(current: Record<string, AgentDetail>, approval: AgentApprovalRequest) {
+  const detail = current[approval.agentId];
+  if (!detail) {
+    return current;
+  }
+  return {
+    ...current,
+    [approval.agentId]: {
+      ...detail,
+      approvals: mergeApprovalList(detail.approvals, [approval])
+    }
   };
 }
 

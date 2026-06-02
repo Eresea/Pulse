@@ -40,6 +40,15 @@ export const appConfig = {
     tools: "/api/v1/ai/tools",
     chatStream: "/api/v1/ai/chat/stream"
   },
+  agents: {
+    list: "/api/v1/agents",
+    detail: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}`,
+    messages: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/messages`,
+    pause: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/pause`,
+    resume: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/resume`,
+    stop: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/stop`,
+    approval: (approvalId: string) => `/api/v1/agents/approvals/${encodeURIComponent(approvalId)}`
+  },
   sync: {
     events: undefined as string | undefined
   }

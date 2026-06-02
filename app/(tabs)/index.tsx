@@ -1,4 +1,4 @@
-import { Activity, Bot, ChevronRight, MessageCirclePlus, MoreVertical, Radio, RefreshCcw, ShieldCheck, Smartphone, Trash2 } from "lucide-react-native";
+import { Activity, Bot, ChevronRight, MessageCirclePlus, MoreVertical, Radio, RefreshCcw, ShieldCheck, Smartphone, Trash2, Workflow } from "lucide-react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -16,7 +16,7 @@ import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 
 export default function HomeScreen() {
-  const { session, realtime, push, polling, updates, aiChat, actions } = useAppState();
+  const { session, realtime, push, polling, updates, aiChat, agents, actions } = useAppState();
   const { colors } = useTheme();
   const [creating, setCreating] = useState(false);
   const [actionThread, setActionThread] = useState<AiChatThread | undefined>();
@@ -128,16 +128,16 @@ export default function HomeScreen() {
           <CardContent className="gap-3">
             <View className="flex-row items-center justify-between gap-3">
               <View className="min-w-0 flex-1 flex-row items-center gap-2">
-                <Activity color={colors.icon} size={18} />
-                <Text className="text-sm font-medium text-foreground dark:text-slate-100">Inbox stream</Text>
+                <Workflow color={colors.icon} size={18} />
+                <Text className="text-sm font-medium text-foreground dark:text-slate-100">Agent command stream</Text>
               </View>
-              <Badge variant="outline">No live events</Badge>
+              <Badge variant={agents.pendingApprovals.length ? "default" : "outline"}>{agents.pendingApprovals.length ? `${agents.pendingApprovals.length} approvals` : `${agents.items.length} agents`}</Badge>
             </View>
             <Text className="text-sm text-muted-foreground dark:text-slate-400">
-              Chat, Bellum, and push events will appear in Inbox as they arrive.
+              Running agents, approval requests, and blackboard updates are routed into the Agents surface.
             </Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Open inbox" className="h-11 flex-row items-center justify-between rounded-md border border-border px-3 dark:border-neutral-800" onPress={() => router.push("/(tabs)/inbox" as Href)}>
-              <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Open Inbox</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Open agents" className="h-11 flex-row items-center justify-between rounded-md border border-border px-3 dark:border-neutral-800" onPress={() => router.push("/(tabs)/agents" as Href)}>
+              <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Open Agents</Text>
               <ChevronRight color={colors.muted} size={18} />
             </Pressable>
           </CardContent>

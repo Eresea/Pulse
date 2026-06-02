@@ -5,7 +5,7 @@ import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 import { router, usePathname } from "expo-router";
 import type { Href } from "expo-router";
-import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, MoreVertical, Settings, Trash2, UserRound } from "lucide-react-native";
+import { Bell, Bot, CalendarClock, ChevronRight, Home, Menu, MoreVertical, Settings, Trash2, UserRound, Workflow } from "lucide-react-native";
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, Image, Pressable, Text, useWindowDimensions, View } from "react-native";
 import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
@@ -15,12 +15,12 @@ import { ActionSheet } from "@/components/ui/action-sheet";
 
 type DrawerDestination = {
   label: string;
-  href: "/(tabs)" | "/(tabs)/inbox" | "/(tabs)/chat" | "/(tabs)/profile" | "/(tabs)/settings";
+  href: "/(tabs)" | "/(tabs)/agents" | "/(tabs)/inbox" | "/(tabs)/chat" | "/(tabs)/profile" | "/(tabs)/settings";
   icon: React.ComponentType<{ color: string; size: number }>;
   match: (pathname: string) => boolean;
 };
 
-type PrimaryDrawerHref = "/(tabs)" | "/(tabs)/inbox" | "/(tabs)/chat";
+type PrimaryDrawerHref = "/(tabs)" | "/(tabs)/agents" | "/(tabs)/inbox" | "/(tabs)/chat";
 
 type DrawerShellContextValue = {
   openMenu: () => void;
@@ -42,6 +42,12 @@ const mainDestinations: DrawerDestination[] = [
     match: (pathname) => pathname.includes("/inbox"),
   },
   {
+    label: "Agents",
+    href: "/(tabs)/agents",
+    icon: Workflow,
+    match: (pathname) => pathname.includes("/agents"),
+  },
+  {
     label: "AI Chat",
     href: "/(tabs)/chat",
     icon: Bot,
@@ -59,6 +65,10 @@ const profileDestination: DrawerDestination = {
 function getPrimaryHref(pathname: string): PrimaryDrawerHref | undefined {
   if (pathname.includes("/inbox")) {
     return "/(tabs)/inbox";
+  }
+
+  if (pathname.includes("/agents")) {
+    return "/(tabs)/agents";
   }
 
   if (pathname.includes("/chat")) {
@@ -98,7 +108,7 @@ export function PageHeader({ title }: { title: string }) {
 
 export function DrawerShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { session, aiChat, actions } = useAppState();
+  const { session, aiChat, agents, actions } = useAppState();
   const { width: screenWidth } = useWindowDimensions();
   const { colors } = useTheme();
   const profileLabel = session.user?.name || session.user?.email || "Profile";
@@ -264,6 +274,29 @@ export function DrawerShell({ children }: { children: ReactNode }) {
                     {mainDestinations.map((item) => (
                       <DrawerItem key={item.label} item={item} active={item.match(pathname)} onPress={() => navigate(item.href)} />
                     ))}
+                  </View>
+
+                  <View className="mt-6 gap-3">
+                    <SectionTitle>Agents</SectionTitle>
+                    {agents.items.length ? (
+                      agents.items.slice(0, 3).map((agent) => (
+                        <ReservedRow
+                          key={agent.id}
+                          icon={Workflow}
+                          label={agent.name}
+                          detail={agent.lastUpdate || agent.status.replace("_", " ")}
+                          live={agent.status === "running" || agent.needsAttention}
+                          onPress={() => {
+                            router.push({ pathname: "/(tabs)/agents/[agentId]", params: { agentId: agent.id } } as unknown as Href);
+                            if (open) {
+                              snapTo(false);
+                            }
+                          }}
+                        />
+                      ))
+                    ) : (
+                      <ReservedRow icon={Workflow} label={agents.isLoading ? "Loading agents" : "No active agents"} />
+                    )}
                   </View>
 
                   <View className="mt-6 gap-3">

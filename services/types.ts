@@ -206,6 +206,112 @@ export type RootsEvent = {
   payload: unknown;
 };
 
+export type AgentStatus = "idle" | "running" | "waiting_input" | "blocked" | "paused" | "failed" | "completed";
+export type AgentTimelineEventType = "blackboard" | "message" | "approval" | "log" | "artifact" | "error";
+
+export type AgentProgress = {
+  current?: number;
+  total?: number;
+  label?: string;
+  percent?: number;
+};
+
+export type AgentArtifact = {
+  id: string;
+  title: string;
+  type?: string;
+  url?: string;
+  summary?: string;
+  createdAt?: string;
+};
+
+export type AgentContextReference = {
+  id: string;
+  title: string;
+  type?: string;
+  url?: string;
+  summary?: string;
+};
+
+export type AgentDecision = {
+  id: string;
+  title: string;
+  rationale?: string;
+  createdAt?: string;
+};
+
+export type AgentBlackboard = {
+  objective?: string;
+  plan: string[];
+  activeStep?: string;
+  decisions: AgentDecision[];
+  blockers: string[];
+  artifacts: AgentArtifact[];
+  contextReferences: AgentContextReference[];
+  recentUpdates: string[];
+  updatedAt?: string;
+};
+
+export type AgentApprovalRequest = {
+  id: string;
+  agentId: string;
+  title: string;
+  body: string;
+  risk?: AiToolRisk;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  requestedAt?: string;
+  expiresAt?: string;
+  status: "pending" | "approved" | "rejected";
+};
+
+export type AgentSummary = {
+  id: string;
+  name: string;
+  objective?: string;
+  status: AgentStatus;
+  location?: string;
+  runtime?: string;
+  owner?: string;
+  progress?: AgentProgress;
+  needsAttention: boolean;
+  lastUpdate?: string;
+  updatedAt?: string;
+};
+
+export type AgentTimelineEvent = {
+  id: string;
+  agentId: string;
+  type: AgentTimelineEventType;
+  title: string;
+  body?: string;
+  createdAt: string;
+  severity?: "info" | "warning" | "error";
+  approval?: AgentApprovalRequest;
+  artifact?: AgentArtifact;
+};
+
+export type AgentDetail = AgentSummary & {
+  blackboard: AgentBlackboard;
+  timeline: AgentTimelineEvent[];
+  approvals: AgentApprovalRequest[];
+};
+
+export type AgentSpawnRequest = {
+  objective: string;
+  runtime?: string;
+  location?: string;
+};
+
+export type AgentInstructionRequest = {
+  message: string;
+};
+
+export type AgentApprovalResponse = {
+  accepted: boolean;
+  respondedAt?: string;
+};
+
 export type AiChatRole = "user" | "assistant" | "system";
 export type AiToolLifecycleStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled" | "waiting_confirmation";
 export type AiToolRisk = "low" | "medium" | "high";

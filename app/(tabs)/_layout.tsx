@@ -26,6 +26,8 @@ export default function TabsLayout() {
     <DrawerShell>
       <Stack screenOptions={{ headerShown: false, animation: "none" }}>
         <Stack.Screen name="index" />
+        <Stack.Screen name="agents/index" />
+        <Stack.Screen name="agents/[agentId]" />
         <Stack.Screen name="inbox" />
         <Stack.Screen name="chat/index" />
         <Stack.Screen name="chat/[threadId]" />
