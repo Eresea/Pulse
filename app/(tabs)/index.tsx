@@ -1,13 +1,12 @@
 import { Activity, Bot, ChevronRight, MessageCirclePlus, MoreVertical, Radio, RefreshCcw, ShieldCheck, Smartphone, Trash2, Workflow } from "lucide-react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Screen, ScreenScrollView } from "@/components/screen";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/drawer-shell";
 import { cn } from "@/lib/cn";
 import { triggerLongPressFeedback, triggerTapFeedback } from "@/lib/tactile-feedback";
@@ -51,125 +50,88 @@ export default function HomeScreen() {
   return (
     <Screen>
       <PageHeader title="Home" />
-      <ScreenScrollView>
-        <Card className="overflow-hidden">
-          <CardContent className="gap-4 p-4">
-            <View className="flex-row items-start gap-3">
-              <View className="size-11 items-center justify-center rounded-full bg-primary">
-                <Bot color={colors.primaryForeground} size={22} />
-              </View>
-              <View className="min-w-0 flex-1 gap-1">
-                <Text className="text-xl font-bold text-foreground dark:text-slate-100">Ask Nexus</Text>
-                <Text className="text-sm text-muted-foreground dark:text-slate-400">
-                  Start a focused chat or continue where you left off.
-                </Text>
-              </View>
+      <ScreenScrollView contentContainerClassName="gap-6 px-4 pb-5 pt-2">
+        <View className="gap-4 rounded-lg border border-border bg-card p-4 dark:border-neutral-800 dark:bg-black">
+          <View className="flex-row items-start justify-between gap-4">
+            <View className="min-w-0 flex-1 gap-1">
+              <Text className="text-xl font-bold text-foreground dark:text-slate-100">Ask Nexus</Text>
+              <Text className="text-sm leading-5 text-muted-foreground dark:text-slate-400">Start a focused chat or continue recent operational work.</Text>
             </View>
-
-            <View className="gap-2">
-              <Button
-                className="h-12"
-                disabled={creating}
-                onPress={() => {
-                  void createThread();
-                }}
-              >
-                {creating ? "Starting..." : "Start new chat"}
-              </Button>
-              {latestThread ? <ThreadAction thread={latestThread} onOpenActions={() => setActionThread(latestThread)} /> : null}
-            </View>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <View className="flex-row items-center justify-between gap-3">
-              <CardTitle>Continue</CardTitle>
-              <Pressable accessibilityRole="button" accessibilityLabel="Open all AI chats" className="flex-row items-center gap-1" onPress={() => router.push("/(tabs)/chat" as Href)}>
-                <Text className="text-sm font-semibold text-primary">All chats</Text>
-                <ChevronRight color={colors.primary} size={16} />
-              </Pressable>
-            </View>
-          </CardHeader>
-          <CardContent className="gap-2">
-            {aiChat.error ? <Text className="text-sm text-red-600 dark:text-red-400">{aiChat.error}</Text> : null}
-            {aiChat.isLoadingThreads && !recentThreads.length ? (
-              <View className="flex-row items-center gap-2 py-2">
-                <ActivityIndicator color={colors.icon} />
-                <Text className="text-sm text-muted-foreground dark:text-slate-400">Loading chats</Text>
-              </View>
-            ) : recentThreads.length ? (
-              recentThreads.map((thread) => <ThreadRow key={thread.id} thread={thread} onOpenActions={() => setActionThread(thread)} />)
-            ) : (
-              <View className="items-center gap-2 rounded-md border border-dashed border-border bg-background p-5 dark:border-neutral-800 dark:bg-black">
-                <MessageCirclePlus color={colors.muted} size={22} />
-                <Text className="text-sm font-medium text-foreground dark:text-slate-100">No chats yet</Text>
-                <Text className="text-center text-sm text-muted-foreground dark:text-slate-400">
-                  Start with Nexus when you need an answer, plan, or operational summary.
-                </Text>
-                <Button
-                  className="mt-1"
-                  disabled={creating}
-                  onPress={() => {
-                    void createThread();
-                  }}
-                >
-                  {creating ? "Starting..." : "Start chat"}
-                </Button>
-              </View>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Activity</CardTitle>
-          </CardHeader>
-          <CardContent className="gap-3">
-            <View className="flex-row items-center justify-between gap-3">
-              <View className="min-w-0 flex-1 flex-row items-center gap-2">
-                <Workflow color={colors.icon} size={18} />
-                <Text className="text-sm font-medium text-foreground dark:text-slate-100">Agent command stream</Text>
-              </View>
-              <Badge variant={agents.pendingApprovals.length ? "default" : "outline"}>{agents.pendingApprovals.length ? `${agents.pendingApprovals.length} approvals` : `${agents.items.length} agents`}</Badge>
-            </View>
-            <Text className="text-sm text-muted-foreground dark:text-slate-400">
-              Running agents, approval requests, and blackboard updates are routed into the Agents surface.
-            </Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Open agents" className="h-11 flex-row items-center justify-between rounded-md border border-border px-3 dark:border-neutral-800" onPress={() => router.push("/(tabs)/agents" as Href)}>
-              <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Open Agents</Text>
-              <ChevronRight color={colors.muted} size={18} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Start new chat"
+              className="size-12 items-center justify-center rounded-full bg-primary"
+              disabled={creating}
+              onPress={() => {
+                void createThread();
+              }}
+            >
+              {creating ? <ActivityIndicator color={colors.primaryForeground} /> : <MessageCirclePlus color={colors.primaryForeground} size={22} />}
             </Pressable>
-          </CardContent>
-        </Card>
+          </View>
+          {latestThread ? <ThreadAction thread={latestThread} onOpenActions={() => setActionThread(latestThread)} /> : null}
+        </View>
 
-        <Card>
-          <CardHeader>
-            <View className="flex-row items-center justify-between gap-3">
-              <CardTitle>System status</CardTitle>
-              <Pressable accessibilityRole="button" accessibilityLabel="Open settings" className="flex-row items-center gap-1" onPress={() => router.push("/(tabs)/settings" as Href)}>
-                <Text className="text-sm font-semibold text-primary">Details</Text>
-                <ChevronRight color={colors.primary} size={16} />
-              </Pressable>
+        <SectionHeader title="Continue" actionLabel="All chats" accessibilityLabel="Open all AI chats" onPress={() => router.push("/(tabs)/chat" as Href)} />
+        <View className="gap-0">
+          {aiChat.error ? <Text className="pb-3 text-sm text-red-600 dark:text-red-400">{aiChat.error}</Text> : null}
+          {aiChat.isLoadingThreads && !recentThreads.length ? (
+            <View className="flex-row items-center gap-2 py-3">
+              <ActivityIndicator color={colors.icon} />
+              <Text className="text-sm text-muted-foreground dark:text-slate-400">Loading chats</Text>
             </View>
-          </CardHeader>
-          <CardContent className="gap-3">
-            <View className="flex-row flex-wrap gap-2">
-              <StatusBadge label="Auth" value={session.isAuthenticated ? "Signed in" : "Guest"} healthy={session.isAuthenticated} />
-              <StatusBadge label="Realtime" value={realtime.status} healthy={realtime.status === "connected"} />
-              <StatusBadge label="Push" value={push.permissionStatus} healthy={push.permissionStatus === "registered"} />
-              <StatusBadge label="Polling" value={polling.status} healthy={polling.status === "running"} />
-              <StatusBadge label="Updates" value={updates.status} healthy={updates.status === "current" || updates.status === "idle"} />
+          ) : recentThreads.length ? (
+            recentThreads.map((thread, index) => (
+              <ThreadRow key={thread.id} bordered={index < recentThreads.length - 1} thread={thread} onOpenActions={() => setActionThread(thread)} />
+            ))
+          ) : (
+            <EmptyPrompt
+              icon={<MessageCirclePlus color={colors.muted} size={22} />}
+              title="No chats yet"
+              body="Start with Nexus when you need an answer, plan, or operational summary."
+              actionLabel={creating ? "Starting..." : "Start chat"}
+              disabled={creating}
+              onPress={() => {
+                void createThread();
+              }}
+            />
+          )}
+        </View>
+
+        <SectionHeader title="Activity" actionLabel="Agents" accessibilityLabel="Open agents" onPress={() => router.push("/(tabs)/agents" as Href)} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Open agents" className="flex-row items-center justify-between gap-3 border-y border-border py-4 dark:border-neutral-800" onPress={() => router.push("/(tabs)/agents" as Href)}>
+          <View className="min-w-0 flex-1 flex-row items-center gap-3">
+            <View className="size-10 items-center justify-center rounded-full bg-muted dark:bg-slate-800">
+              <Workflow color={colors.icon} size={19} />
             </View>
-            <View className="gap-2">
-              <StatusRow icon={ShieldCheck} label="Auth" value={session.isAuthenticated ? "Signed in" : "Guest"} iconColor={colors.icon} />
-              <StatusRow icon={Radio} label="Realtime" value={realtime.detail ?? realtime.status} iconColor={colors.icon} />
-              <StatusRow icon={Smartphone} label="Push" value={push.permissionStatus} iconColor={colors.icon} />
-              <StatusRow icon={Activity} label="Polling" value={polling.status} iconColor={colors.icon} />
-              <StatusRow icon={RefreshCcw} label="Updates" value={updates.status} iconColor={colors.icon} />
+            <View className="min-w-0 flex-1 gap-1">
+              <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Agent command stream</Text>
+              <Text className="text-sm leading-5 text-muted-foreground dark:text-slate-400" numberOfLines={2}>
+                Running agents, approvals, and blackboard updates.
+              </Text>
             </View>
-          </CardContent>
-        </Card>
+          </View>
+          <View className="items-end gap-2">
+            <Badge variant={agents.pendingApprovals.length ? "default" : "outline"}>{agents.pendingApprovals.length ? `${agents.pendingApprovals.length} approvals` : `${agents.items.length} agents`}</Badge>
+            <ChevronRight color={colors.muted} size={17} />
+          </View>
+        </Pressable>
+
+        <SectionHeader title="System" actionLabel="Details" accessibilityLabel="Open settings" onPress={() => router.push("/(tabs)/settings" as Href)} />
+        <View className="gap-2">
+          <View className="flex-row flex-wrap gap-2 pb-1">
+            <StatusBadge label="Auth" value={session.isAuthenticated ? "Signed in" : "Guest"} healthy={session.isAuthenticated} />
+            <StatusBadge label="Realtime" value={realtime.status} healthy={realtime.status === "connected"} />
+            <StatusBadge label="Push" value={push.permissionStatus} healthy={push.permissionStatus === "registered"} />
+            <StatusBadge label="Polling" value={polling.status} healthy={polling.status === "running"} />
+            <StatusBadge label="Updates" value={updates.status} healthy={updates.status === "current" || updates.status === "idle"} />
+          </View>
+          <StatusRow icon={ShieldCheck} label="Auth" value={session.isAuthenticated ? "Signed in" : "Guest"} iconColor={colors.icon} />
+          <StatusRow icon={Radio} label="Realtime" value={realtime.detail ?? realtime.status} iconColor={colors.icon} />
+          <StatusRow icon={Smartphone} label="Push" value={push.permissionStatus} iconColor={colors.icon} />
+          <StatusRow icon={Activity} label="Polling" value={polling.status} iconColor={colors.icon} />
+          <StatusRow icon={RefreshCcw} label="Updates" value={updates.status} iconColor={colors.icon} />
+        </View>
       </ScreenScrollView>
       <ActionSheet
         actions={[
@@ -194,6 +156,56 @@ export default function HomeScreen() {
   );
 }
 
+function SectionHeader({
+  title,
+  actionLabel,
+  accessibilityLabel,
+  onPress
+}: {
+  title: string;
+  actionLabel: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View className="flex-row items-center justify-between gap-3">
+      <Text className="text-base font-semibold text-foreground dark:text-slate-100">{title}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} className="flex-row items-center gap-1" onPress={onPress}>
+        <Text className="text-sm font-semibold text-primary">{actionLabel}</Text>
+        <ChevronRight color={colors.primary} size={16} />
+      </Pressable>
+    </View>
+  );
+}
+
+function EmptyPrompt({
+  icon,
+  title,
+  body,
+  actionLabel,
+  disabled,
+  onPress
+}: {
+  icon: ReactNode;
+  title: string;
+  body: string;
+  actionLabel: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <View className="items-center gap-2 border-y border-dashed border-border py-6 dark:border-neutral-800">
+      {icon}
+      <Text className="text-sm font-medium text-foreground dark:text-slate-100">{title}</Text>
+      <Text className="max-w-[280px] text-center text-sm leading-5 text-muted-foreground dark:text-slate-400">{body}</Text>
+      <Button className="mt-1" disabled={disabled} onPress={onPress}>
+        {actionLabel}
+      </Button>
+    </View>
+  );
+}
+
 function ThreadAction({ thread, onOpenActions }: { thread: AiChatThread; onOpenActions: () => void }) {
   const { colors } = useTheme();
   const openActionsFromLongPress = () => {
@@ -209,7 +221,7 @@ function ThreadAction({ thread, onOpenActions }: { thread: AiChatThread; onOpenA
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Continue ${thread.title}`}
-      className="h-12 flex-row items-center justify-between gap-3 rounded-md border border-border bg-card px-3 dark:border-neutral-800 dark:bg-black"
+      className="h-12 flex-row items-center justify-between gap-3 rounded-md bg-muted px-3 dark:bg-slate-900"
       onLongPress={openActionsFromLongPress}
       onPress={() => router.push(threadHref(thread.id))}
     >
@@ -228,7 +240,7 @@ function ThreadAction({ thread, onOpenActions }: { thread: AiChatThread; onOpenA
   );
 }
 
-function ThreadRow({ thread, onOpenActions }: { thread: AiChatThread; onOpenActions: () => void }) {
+function ThreadRow({ thread, bordered, onOpenActions }: { thread: AiChatThread; bordered: boolean; onOpenActions: () => void }) {
   const { colors } = useTheme();
   const openActionsFromLongPress = () => {
     triggerLongPressFeedback();
@@ -240,7 +252,7 @@ function ThreadRow({ thread, onOpenActions }: { thread: AiChatThread; onOpenActi
   };
 
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Open ${thread.title}`} className="rounded-md border border-border bg-background p-3 dark:border-neutral-800 dark:bg-black" onLongPress={openActionsFromLongPress} onPress={() => router.push(threadHref(thread.id))}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`Open ${thread.title}`} className={cn("py-3", bordered && "border-b border-border dark:border-neutral-800")} onLongPress={openActionsFromLongPress} onPress={() => router.push(threadHref(thread.id))}>
       <View className="flex-row items-center justify-between gap-3">
         <View className="min-w-0 flex-1 flex-row items-center gap-3">
           <View className="size-9 items-center justify-center rounded-full bg-muted dark:bg-slate-800">
