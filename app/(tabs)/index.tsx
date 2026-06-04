@@ -51,7 +51,7 @@ export default function HomeScreen() {
     <Screen>
       <PageHeader title="Home" />
       <ScreenScrollView contentContainerClassName="gap-6 px-4 pb-5 pt-2">
-        <View className="gap-4 rounded-lg border border-border bg-card p-4 dark:border-neutral-800 dark:bg-black">
+        <View className="gap-4">
           <View className="flex-row items-start justify-between gap-4">
             <View className="min-w-0 flex-1 gap-1">
               <Text className="text-xl font-bold text-foreground dark:text-slate-100">Ask Nexus</Text>
@@ -221,7 +221,7 @@ function ThreadAction({ thread, onOpenActions }: { thread: AiChatThread; onOpenA
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Continue ${thread.title}`}
-      className="h-12 flex-row items-center justify-between gap-3 rounded-md bg-muted px-3 dark:bg-slate-900"
+      className="-mx-4 flex-row items-center justify-between gap-3 border-y border-teal-200 bg-teal-50 px-4 py-3 dark:border-teal-950 dark:bg-teal-950/30"
       onLongPress={openActionsFromLongPress}
       onPress={() => router.push(threadHref(thread.id))}
     >
@@ -229,12 +229,12 @@ function ThreadAction({ thread, onOpenActions }: { thread: AiChatThread; onOpenA
         <Text className="text-sm font-semibold text-foreground dark:text-slate-100" numberOfLines={1}>
           Continue: {thread.title}
         </Text>
-        <Text className="text-xs text-muted-foreground dark:text-slate-400" numberOfLines={1}>
+        <Text className="text-xs text-teal-700 dark:text-teal-200" numberOfLines={1}>
           {thread.preview || "No messages yet"}
         </Text>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Open actions for ${thread.title}`} className="size-9 items-center justify-center rounded-full bg-muted dark:bg-slate-800" onPress={openActionsFromButton}>
-        <MoreVertical color={colors.muted} size={18} />
+      <Pressable accessibilityRole="button" accessibilityLabel={`Open actions for ${thread.title}`} className="size-9 items-center justify-center rounded-full bg-teal-100 dark:bg-teal-900" onPress={openActionsFromButton}>
+        <MoreVertical color={colors.icon} size={18} />
       </Pressable>
     </Pressable>
   );
