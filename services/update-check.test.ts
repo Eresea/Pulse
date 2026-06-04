@@ -9,10 +9,10 @@ describe("buildApkUpdateCheckPath", () => {
         appId: "pulse",
         platform: "android",
         channel: "production",
-        currentVersion: "0.1.3",
+        currentVersion: "0.1.4",
         deviceId: "device 1"
       }),
-      "/api/v1/updates/check?appId=pulse&platform=android&channel=production&currentVersion=0.1.3&deviceId=device+1"
+      "/api/v1/updates/check?appId=pulse&platform=android&channel=production&currentVersion=0.1.4&deviceId=device+1"
     );
   });
 });
@@ -27,7 +27,7 @@ describe("parseApkUpdateResponse", () => {
   it("maps available Nexus APK updates", async () => {
     const result = await parseApkUpdateResponse(
       Response.json({
-        version: "0.1.3",
+        version: "0.1.4",
         url: "https://nexus.eresea.net/downloads/pulse.apk",
         signature: "sig",
         notes: "Bug fixes"
@@ -37,7 +37,7 @@ describe("parseApkUpdateResponse", () => {
     assert.deepEqual(result, {
       status: "available",
       available: true,
-      version: "0.1.3",
+      version: "0.1.4",
       url: "https://nexus.eresea.net/downloads/pulse.apk",
       signature: "sig",
       notes: "Bug fixes"
