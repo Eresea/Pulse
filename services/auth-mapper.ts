@@ -5,8 +5,10 @@ import type {
   ConnectorStatus,
   NexusConnector,
   NexusConnectorListResponse,
+  NexusClaim,
   NexusPermission,
   NexusProvider,
+  NexusRole,
   NexusUser,
   UserInfo,
   UserPermission
@@ -24,7 +26,12 @@ export function mapNexusUser(user: NexusUser): UserInfo {
     avatarUrl: user.avatarUrl ?? user.imageUrl ?? user.picture ?? user.avatar,
     emailVerified: user.emailVerified,
     providers: providers.map(mapProvider),
-    permissions: mapPermissions(user.permissions ?? user.scopes ?? [])
+    permissions: [
+      ...mapPermissions(user.permissions ?? user.scopes ?? []),
+      ...mapRoles(user.roles ?? []),
+      ...mapClaims(user.claims),
+      ...mapFeatureOverrides(user.featureOverrides ?? user.feature_overrides)
+    ]
   };
 }
 
@@ -58,6 +65,87 @@ function mapPermissions(permissions: NexusPermission[]): UserPermission[] {
 
 function compactPermission(permission: UserPermission): UserPermission {
   return Object.fromEntries(Object.entries(permission).filter(([, value]) => value !== undefined)) as UserPermission;
+}
+
+function mapRoles(roles: NexusRole[]): UserPermission[] {
+  return roles.map((role) => {
+    if (typeof role === "string") {
+      return { id: `role:${role}`, name: role, granted: true, category: "Role" };
+    }
+
+    const key = role.key ?? role.roleKey ?? role.role_key ?? role.id ?? role.name ?? role.displayName ?? "unknown";
+    return compactPermission({
+      id: `role:${key}`,
+      name: role.displayName ?? role.name ?? key,
+      description: role.description,
+      granted: role.granted ?? role.enabled ?? role.assigned ?? true,
+      category: "Role"
+    });
+  });
+}
+
+function mapClaims(claims: NexusUser["claims"]): UserPermission[] {
+  if (!claims) {
+    return [];
+  }
+
+  if (Array.isArray(claims)) {
+    return claims.map(mapClaim);
+  }
+
+  return Object.entries(claims).map(([key, value]) =>
+    compactPermission({
+      id: `claim:${key}`,
+      name: key,
+      granted: booleanValue(value),
+      category: "Claim"
+    })
+  );
+}
+
+function mapClaim(claim: NexusClaim): UserPermission {
+  const key = claim.key ?? claim.claimKey ?? claim.claim_key ?? claim.id ?? claim.name ?? claim.displayName ?? "unknown";
+  return compactPermission({
+    id: `claim:${key}`,
+    name: claim.displayName ?? claim.name ?? key,
+    description: claim.description,
+    granted: claim.granted ?? claim.enabled ?? claim.allowed ?? booleanValue(claim.value),
+    category: "Claim"
+  });
+}
+
+function mapFeatureOverrides(features: NexusUser["featureOverrides"]): UserPermission[] {
+  if (!features) {
+    return [];
+  }
+
+  return Object.entries(features).map(([key, value]) =>
+    compactPermission({
+      id: `feature:${key}`,
+      name: key,
+      granted: booleanValue(value),
+      category: "Feature"
+    })
+  );
+}
+
+function booleanValue(value: boolean | string | number | null | undefined): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "enabled", "granted", "allowed"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "disabled", "denied", "blocked"].includes(normalized)) {
+      return false;
+    }
+  }
+  return undefined;
 }
 
 function mapConnectorStatus(provider: NexusProvider): ConnectorStatus {

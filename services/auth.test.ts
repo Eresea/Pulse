@@ -44,6 +44,31 @@ describe("mapNexusUser", () => {
       { id: "profile:read", name: "profile:read" }
     ]);
   });
+
+  it("maps Nexus authorization roles, claims, and feature overrides into profile permissions", () => {
+    const user = mapNexusUser({
+      id: "user-1",
+      roles: [
+        { key: "roots.admin", name: "Roots Admin", description: "Manage Roots" },
+        "operator"
+      ],
+      claims: {
+        "ai.chat": true,
+        "billing.read": false
+      },
+      featureOverrides: {
+        inbox: true
+      }
+    });
+
+    assert.deepEqual(user.permissions, [
+      { id: "role:roots.admin", name: "Roots Admin", description: "Manage Roots", granted: true, category: "Role" },
+      { id: "role:operator", name: "operator", granted: true, category: "Role" },
+      { id: "claim:ai.chat", name: "ai.chat", granted: true, category: "Claim" },
+      { id: "claim:billing.read", name: "billing.read", granted: false, category: "Claim" },
+      { id: "feature:inbox", name: "inbox", granted: true, category: "Feature" }
+    ]);
+  });
 });
 
 describe("mapNexusConnectorList", () => {

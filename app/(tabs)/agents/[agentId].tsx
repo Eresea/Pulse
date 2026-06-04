@@ -36,6 +36,7 @@ export default function AgentDetailScreen() {
   const detail = agentId ? agents.detailsById[agentId] : undefined;
   const summary = agentId ? agents.items.find((agent) => agent.id === agentId) : undefined;
   const profile = agents.profiles.find((item) => item.id === (detail?.profileId ?? summary?.profileId));
+  const detailUnavailable = Boolean((agents.apiUnavailable || isNotFoundError(agents.error)) && summary && !detail);
   const visibleEvents = useMemo(() => {
     const events = detail?.timeline ?? [];
     return activeTab === "all" ? events : events.filter((event) => event.type === activeTab);
@@ -117,7 +118,7 @@ export default function AgentDetailScreen() {
         </View>
       </View>
       <ScreenScrollView>
-        {agents.error ? (
+        {agents.error && !detailUnavailable ? (
           <View className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-950 dark:bg-red-950/40">
             <Text className="text-sm text-red-700 dark:text-red-200">{agents.error}</Text>
           </View>
@@ -189,9 +190,17 @@ export default function AgentDetailScreen() {
                 </Card>
               </>
             ) : (
-              <Button variant="outline" onPress={loadDetail}>
-                Load details
-              </Button>
+              <Card>
+                <CardContent className="gap-3 p-4">
+                  <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Agent details unavailable</Text>
+                  <Text className="text-sm text-muted-foreground dark:text-slate-400">
+                    Pulse can show the agent summary, but Nexus did not return the detailed blackboard for this agent yet.
+                  </Text>
+                  <Button variant="outline" onPress={loadDetail}>
+                    Retry details
+                  </Button>
+                </CardContent>
+              </Card>
             )}
           </>
         ) : (
@@ -452,4 +461,8 @@ function formatTime(value: string) {
     return "";
   }
   return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function isNotFoundError(message?: string) {
+  return /404|not found|not_found/i.test(message ?? "");
 }

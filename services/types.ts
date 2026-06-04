@@ -39,6 +39,7 @@ export type UserPermission = {
   name: string;
   description?: string;
   granted?: boolean;
+  category?: string;
 };
 
 export type ConnectorActionState = {
@@ -109,6 +110,10 @@ export type NexusUser = {
   externalLogins?: NexusProvider[];
   permissions?: NexusPermission[];
   scopes?: NexusPermission[];
+  roles?: NexusRole[];
+  claims?: NexusClaim[] | Record<string, boolean | string | number | null | undefined>;
+  featureOverrides?: Record<string, boolean | string | number | null | undefined>;
+  feature_overrides?: Record<string, boolean | string | number | null | undefined>;
 };
 
 export type NexusProvider = {
@@ -190,6 +195,35 @@ export type NexusPermission =
       enabled?: boolean;
       allowed?: boolean;
     };
+
+export type NexusRole =
+  | string
+  | {
+      id?: string;
+      key?: string;
+      roleKey?: string;
+      role_key?: string;
+      name?: string;
+      displayName?: string;
+      description?: string;
+      granted?: boolean;
+      enabled?: boolean;
+      assigned?: boolean;
+    };
+
+export type NexusClaim = {
+  id?: string;
+  key?: string;
+  claimKey?: string;
+  claim_key?: string;
+  name?: string;
+  displayName?: string;
+  value?: boolean | string | number | null;
+  granted?: boolean;
+  enabled?: boolean;
+  allowed?: boolean;
+  description?: string;
+};
 
 export type DeviceInfo = {
   deviceId: string;

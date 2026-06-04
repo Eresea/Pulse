@@ -790,6 +790,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             mergeAgentDetailState(detail);
             return detail;
           } catch (err) {
+            if (isAgentApiUnavailableError(err) && agents.some((agent) => agent.id === agentId)) {
+              setAgentApiUnavailable(true);
+              throw err;
+            }
             setAgentsError(err instanceof Error ? err.message : "Could not load agent.");
             throw err;
           } finally {

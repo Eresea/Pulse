@@ -215,6 +215,7 @@ function PermissionRow({ permission }: { permission: UserPermission }) {
             {permission.name}
           </Text>
         </View>
+        {permission.category ? <Badge variant="secondary">{permission.category}</Badge> : null}
         {permission.granted === undefined ? null : (
           <Badge variant={permission.granted ? "default" : "outline"}>{permission.granted ? "Granted" : "Not granted"}</Badge>
         )}
