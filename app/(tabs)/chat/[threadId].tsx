@@ -2,7 +2,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as Clipboard from "expo-clipboard";
 import { ArrowLeft, Bot, Check, File, Pencil, Plus, SendHorizontal, X } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Animated, Easing, FlatList, Keyboard, KeyboardAvoidingView, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MessageRenderer } from "@/components/ai-chat/message-renderer";
@@ -31,7 +31,7 @@ export default function AiChatThreadScreen() {
   const { aiChat, actions } = useAppState();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const { height: windowHeight } = useWindowDimensions();
   const listRef = useRef<FlatList<TimelineItem>>(null);
   const stickToBottomRef = useRef(true);
   const didLoadModels = useRef(false);
@@ -312,7 +312,7 @@ export default function AiChatThreadScreen() {
         <FlatList
           ref={listRef}
           className="flex-1"
-          contentContainerStyle={{ gap: 12, paddingBottom: Math.max(16, composerHeight + 16), paddingHorizontal: 16, paddingTop: 8 }}
+          contentContainerStyle={{ paddingBottom: Math.max(16, composerHeight + 16), paddingHorizontal: 16, paddingTop: 8 }}
           data={timelineItems}
           keyExtractor={timelineKey}
           keyboardDismissMode="interactive"
@@ -329,22 +329,23 @@ export default function AiChatThreadScreen() {
             }
           }}
           onScroll={handleTranscriptScroll(stickToBottomRef)}
-          renderItem={({ item }) =>
-            item.kind === "message" ? (
-              <MessageBubble
-                bubbleMaxWidth={Math.max(220, Math.min(560, windowWidth - 32) * 0.92)}
-                message={item.message}
-                onCopy={() => void Clipboard.setStringAsync(item.message.content)}
-                onRetry={() => void retryFromMessage(item.message)}
-              />
-            ) : (
-              <TimelineEventCard
-                submittingConfirmationId={submittingConfirmationId}
-                timelineEvent={item.event}
-                onRespondToConfirmation={(confirmationId, accepted) => void respondToConfirmation(confirmationId, accepted)}
-              />
-            )
-          }
+          renderItem={({ item, index }) => (
+            <TimelineItemRow item={item} nextItem={timelineItems[index + 1]}>
+              {item.kind === "message" ? (
+                <TranscriptMessage
+                  message={item.message}
+                  onCopy={() => void Clipboard.setStringAsync(item.message.content)}
+                  onRetry={() => void retryFromMessage(item.message)}
+                />
+              ) : (
+                <TimelineEventCard
+                  submittingConfirmationId={submittingConfirmationId}
+                  timelineEvent={item.event}
+                  onRespondToConfirmation={(confirmationId, accepted) => void respondToConfirmation(confirmationId, accepted)}
+                />
+              )}
+            </TimelineItemRow>
+          )}
           scrollEventThrottle={80}
         />
 
@@ -393,7 +394,7 @@ export default function AiChatThreadScreen() {
             </Pressable>
             <View className="max-h-32 min-h-11 flex-1 rounded-md border border-input bg-card px-3 py-2 dark:border-neutral-800 dark:bg-black">
               <TextInput
-                accessibilityLabel="Message Nexus AI"
+                accessibilityLabel="Ask Nexus AI"
                 className="p-0 text-base text-foreground dark:text-slate-100"
                 editable={!isStreaming}
                 multiline
@@ -403,7 +404,7 @@ export default function AiChatThreadScreen() {
                     void sendMessage();
                   }
                 }}
-                placeholder="Message Nexus"
+                placeholder="Ask Nexus"
                 placeholderTextColor={colors.muted}
                 returnKeyType="send"
                 selectionColor={colors.primary}
@@ -513,6 +514,23 @@ function timelineKey(item: TimelineItem) {
   return item.kind === "message" ? `message-${item.message.id}` : `event-${item.event.id}`;
 }
 
+function TimelineItemRow({ children, item, nextItem }: { children: ReactNode; item: TimelineItem; nextItem?: TimelineItem }) {
+  return <View style={{ marginBottom: timelineItemGap(item, nextItem) }}>{children}</View>;
+}
+
+function timelineItemGap(item: TimelineItem, nextItem?: TimelineItem) {
+  if (!nextItem) {
+    return 0;
+  }
+  if (item.kind === "message" && item.message.role === "user" && nextItem.kind === "message" && nextItem.message.role === "assistant") {
+    return 10;
+  }
+  if (item.kind === "message" && item.message.role === "assistant" && nextItem.kind === "message" && nextItem.message.role === "user") {
+    return 24;
+  }
+  return 18;
+}
+
 function handleTranscriptScroll(stickToBottomRef: TranscriptScrollRef) {
   return (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
@@ -533,9 +551,9 @@ function ChatEmptyState({ colors, isLoading }: { colors: ReturnType<typeof useTh
   return (
     <View className="items-center gap-2 rounded-md border border-dashed border-border bg-card p-6 dark:border-neutral-800 dark:bg-black">
       <Bot color={colors.muted} size={24} />
-      <Text className="text-sm font-medium text-foreground dark:text-slate-100">Start the conversation</Text>
+      <Text className="text-sm font-medium text-foreground dark:text-slate-100">Ask a question</Text>
       <Text className="text-center text-sm text-muted-foreground dark:text-slate-400">
-        Ask Nexus for a focused answer, plan, or operational summary.
+        Nexus will answer with a focused response and keep the thread here.
       </Text>
     </View>
   );
@@ -578,36 +596,60 @@ function TimelineEventCard({
   return null;
 }
 
-function MessageBubble({
-  bubbleMaxWidth,
+function TranscriptMessage({
   message,
   onCopy,
   onRetry
 }: {
-  bubbleMaxWidth: number;
   message: AiChatMessage;
   onCopy: () => void;
   onRetry: () => void;
 }) {
-  const isUser = message.role === "user";
+  if (message.role === "user") {
+    return <QuestionBlock message={message} />;
+  }
+
+  return <AssistantAnswer message={message} onCopy={onCopy} onRetry={onRetry} />;
+}
+
+function QuestionBlock({ message }: { message: AiChatMessage }) {
+  const isPending = message.status === "sending" || message.status === "streaming";
+  const isError = message.status === "error";
+
+  return (
+    <View className="w-full gap-1">
+      <View className={cn("rounded-md border bg-card px-3 py-2 dark:border-neutral-800 dark:bg-black", isError ? "border-red-500" : "border-border")}>
+        <Text className="mb-1 text-xs font-semibold uppercase text-muted-foreground dark:text-slate-400">Question</Text>
+        {message.content ? (
+          <Text selectable className="text-base font-semibold leading-6 text-foreground dark:text-slate-100">
+            {message.content}
+          </Text>
+        ) : (
+          <TypingDots />
+        )}
+      </View>
+      {isPending || isError ? (
+        <MessageStatus isError={isError} status={message.status} />
+      ) : null}
+    </View>
+  );
+}
+
+function AssistantAnswer({ message, onCopy, onRetry }: { message: AiChatMessage; onCopy: () => void; onRetry: () => void }) {
   const isPending = message.status === "sending" || message.status === "streaming";
   const isError = message.status === "error";
   const isAssistant = message.role === "assistant";
 
   return (
-    <View className={cn("gap-1", isUser ? "self-end items-end" : "self-start items-start")} style={{ maxWidth: bubbleMaxWidth }}>
-      <View
-        className={cn(
-          "rounded-lg border px-3 py-2",
-          isUser ? "border-primary bg-primary" : "border-border bg-card dark:border-neutral-800 dark:bg-black",
-          isError && "border-red-500"
-        )}
-        style={{ maxWidth: bubbleMaxWidth, overflow: "hidden" }}
-      >
+    <View className="w-full gap-2">
+      <View className={cn("w-full", isError && "rounded-md border border-red-500 px-3 py-2")}>
         {message.content ? (
-          <MessageRenderer inverse={isUser} markdown={message.content} />
+          <MessageRenderer markdown={message.content} />
         ) : (
-          <TypingDots inverse={isUser} />
+          <View className="flex-row items-center gap-2 py-1">
+            <TypingDots />
+            <Text className="text-sm text-muted-foreground dark:text-slate-400">Nexus is responding</Text>
+          </View>
         )}
       </View>
       {isAssistant && message.content ? (
@@ -617,15 +659,21 @@ function MessageBubble({
         </View>
       ) : null}
       {isPending || isError ? (
-        <Text className={cn("text-xs", isError ? "text-red-600 dark:text-red-400" : "text-muted-foreground dark:text-slate-400")}>
-          {isError ? "Not delivered" : message.status === "streaming" ? "Nexus is responding" : "Sending"}
-        </Text>
+        <MessageStatus isError={isError} status={message.status} />
       ) : null}
     </View>
   );
 }
 
-function TypingDots({ inverse }: { inverse: boolean }) {
+function MessageStatus({ isError, status }: { isError: boolean; status?: AiChatMessage["status"] }) {
+  return (
+    <Text className={cn("text-xs", isError ? "text-red-600 dark:text-red-400" : "text-muted-foreground dark:text-slate-400")}>
+      {isError ? "Not delivered" : status === "streaming" ? "Nexus is responding" : "Sending"}
+    </Text>
+  );
+}
+
+function TypingDots() {
   const { colors } = useTheme();
   const progress = useRef(new Animated.Value(0)).current;
 
@@ -641,8 +689,6 @@ function TypingDots({ inverse }: { inverse: boolean }) {
     animation.start();
     return () => animation.stop();
   }, [progress]);
-
-  const dotColor = inverse ? colors.primaryForeground : colors.muted;
 
   return (
     <View className="h-6 flex-row items-center gap-1 px-1">
@@ -660,7 +706,7 @@ function TypingDots({ inverse }: { inverse: boolean }) {
             key={index}
             className="size-1.5 rounded-full"
             style={{
-              backgroundColor: dotColor,
+              backgroundColor: colors.muted,
               opacity,
               transform: [{ translateY }]
             }}
