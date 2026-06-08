@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mapAgentDetail, mapAgentList, mapAgentProfileList, mapAgentTimelineEvent, normalizeAgentStatus } from "@/services/agents-mapper";
+import { buildAgentGraph, mapAgentDetail, mapAgentList, mapAgentProfileList, mapAgentTimelineEvent, normalizeAgentStatus } from "@/services/agents-mapper";
 
 describe("normalizeAgentStatus", () => {
   it("normalizes Nexus status variants into the Pulse status model", () => {
@@ -65,6 +65,68 @@ describe("mapAgentList", () => {
         updatedAt: undefined
       }
     ]);
+  });
+
+  it("maps parent and task relation hints for the visual blackboard", () => {
+    const agents = mapAgentList({
+      agents: [
+        {
+          id: "parent",
+          name: "Coordinator",
+          status: "running",
+          childAgents: ["child"],
+          tasks: [{ id: "task-1", title: "Review deployment", status: "blocked" }]
+        },
+        {
+          id: "child",
+          name: "Reviewer",
+          status: "waiting_input",
+          parentAgentId: "parent"
+        }
+      ]
+    });
+
+    assert.deepEqual(agents[0].relations, {
+      parentAgentId: undefined,
+      childAgentIds: ["child"],
+      taskIds: ["task-1"]
+    });
+    assert.deepEqual(agents[0].tasks, [{ id: "task-1", title: "Review deployment", status: "blocked" }]);
+    assert.equal(agents[1].relations?.parentAgentId, "parent");
+  });
+});
+
+describe("buildAgentGraph", () => {
+  it("builds nodes and edges for parent, child, and task relationships", () => {
+    const agents = mapAgentList({
+      agents: [
+        {
+          id: "parent",
+          name: "Coordinator",
+          status: "running",
+          child_agent_ids: ["child"],
+          tasks: [{ id: "task-1", title: "Review deployment", state: "waiting_input" }]
+        },
+        {
+          id: "child",
+          name: "Reviewer",
+          status: "blocked",
+          parent_agent_id: "parent"
+        }
+      ]
+    });
+
+    assert.deepEqual(buildAgentGraph(agents), {
+      nodes: [
+        { id: "parent", type: "agent", title: "Coordinator", subtitle: "running", status: "running", depth: 0, agentId: "parent" },
+        { id: "child", type: "agent", title: "Reviewer", subtitle: "blocked", status: "blocked", depth: 1, agentId: "child" },
+        { id: "task-1", type: "task", title: "Review deployment", subtitle: "waiting_input", status: "waiting_input", depth: 1, agentId: "parent" }
+      ],
+      edges: [
+        { id: "parent-child", fromId: "parent", toId: "child", type: "child" },
+        { id: "parent-task-1", fromId: "parent", toId: "task-1", type: "task" }
+      ]
+    });
   });
 });
 

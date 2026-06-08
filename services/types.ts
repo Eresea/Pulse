@@ -274,6 +274,19 @@ export type AgentDecision = {
   createdAt?: string;
 };
 
+export type AgentTask = {
+  id: string;
+  title: string;
+  status?: AgentStatus;
+  summary?: string;
+};
+
+export type AgentRelations = {
+  parentAgentId?: string;
+  childAgentIds: string[];
+  taskIds: string[];
+};
+
 export type AgentProfile = {
   id: string;
   name: string;
@@ -324,6 +337,30 @@ export type AgentSummary = {
   needsAttention: boolean;
   lastUpdate?: string;
   updatedAt?: string;
+  relations?: AgentRelations;
+  tasks?: AgentTask[];
+};
+
+export type AgentGraphNode = {
+  id: string;
+  type: "agent" | "task";
+  title: string;
+  subtitle?: string;
+  status?: AgentStatus;
+  depth: number;
+  agentId?: string;
+};
+
+export type AgentGraphEdge = {
+  id: string;
+  fromId: string;
+  toId: string;
+  type: "child" | "task" | "related";
+};
+
+export type AgentGraph = {
+  nodes: AgentGraphNode[];
+  edges: AgentGraphEdge[];
 };
 
 export type AgentTimelineEvent = {

@@ -4,6 +4,7 @@ import type { Href } from "expo-router";
 import { Bot, RefreshCcw, ServerOff, ShieldAlert } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AgentCompactRow, ApprovalCard } from "@/components/agents/agent-command-ui";
+import { AgentVisualBlackboard } from "@/components/agents/agent-visual-blackboard";
 import { PageHeader } from "@/components/drawer-shell";
 import { Screen, ScreenScrollView } from "@/components/screen";
 import { Badge } from "@/components/ui/badge";
@@ -178,6 +179,8 @@ export default function AgentsScreen() {
             <Text className="text-sm text-red-700 dark:text-red-200">{agents.error}</Text>
           </View>
         ) : null}
+
+        <AgentVisualBlackboard agents={agents.items} onOpenAgent={(agentId) => router.push(agentHref(agentId))} />
 
         {agents.pendingApprovals.length ? (
           <Card>

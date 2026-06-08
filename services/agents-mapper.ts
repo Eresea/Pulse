@@ -4,9 +4,11 @@ import type {
   AgentContextReference,
   AgentDecision,
   AgentDetail,
+  AgentGraph,
   AgentProfile,
   AgentStatus,
   AgentSummary,
+  AgentTask,
   AgentTimelineEvent,
   AgentTimelineEventType,
   AgentArtifact
@@ -26,6 +28,8 @@ export function mapAgentSummary(item: unknown): AgentSummary {
   const agent = asRecord(item);
   const id = stringValue(agent.id) ?? stringValue(agent.agentId) ?? stringValue(agent.agent_id) ?? "";
   const status = normalizeAgentStatus(agent.status ?? agent.state);
+  const relations = mapRelations(agent);
+  const tasks = mapTaskList(agent.tasks ?? agent.taskList ?? agent.task_list);
   return {
     id,
     name: stringValue(agent.name) ?? stringValue(agent.title) ?? "Agent",
@@ -39,13 +43,60 @@ export function mapAgentSummary(item: unknown): AgentSummary {
     progress: mapProgress(agent.progress),
     needsAttention: booleanValue(agent.needsAttention) ?? ["waiting_input", "blocked", "failed"].includes(status),
     lastUpdate: stringValue(agent.lastUpdate) ?? stringValue(agent.last_update) ?? stringValue(agent.preview),
-    updatedAt: stringValue(agent.updatedAt) ?? stringValue(agent.updated_at) ?? stringValue(agent.lastActivityAt)
+    updatedAt: stringValue(agent.updatedAt) ?? stringValue(agent.updated_at) ?? stringValue(agent.lastActivityAt),
+    ...(relations ? { relations } : {}),
+    ...(tasks ? { tasks } : {})
   };
 }
 
 export function mapAgentList(result: unknown): AgentSummary[] {
   const source = Array.isArray(result) ? result : Array.isArray(asRecord(result).agents) ? (asRecord(result).agents as unknown[]) : [];
   return source.map(mapAgentSummary).filter((agent) => agent.id);
+}
+
+export function buildAgentGraph(agents: AgentSummary[]): AgentGraph {
+  const agentIds = new Set(agents.map((agent) => agent.id));
+  const childIds = new Set<string>();
+  const edges = new Map<string, AgentGraph["edges"][number]>();
+
+  agents.forEach((agent) => {
+    agent.relations?.childAgentIds.forEach((childId) => {
+      if (agentIds.has(childId)) {
+        childIds.add(childId);
+        edges.set(`${agent.id}-${childId}`, { id: `${agent.id}-${childId}`, fromId: agent.id, toId: childId, type: "child" });
+      }
+    });
+    if (agent.relations?.parentAgentId && agentIds.has(agent.relations.parentAgentId)) {
+      childIds.add(agent.id);
+      edges.set(`${agent.relations.parentAgentId}-${agent.id}`, { id: `${agent.relations.parentAgentId}-${agent.id}`, fromId: agent.relations.parentAgentId, toId: agent.id, type: "child" });
+    }
+    agent.tasks?.forEach((task) => {
+      edges.set(`${agent.id}-${task.id}`, { id: `${agent.id}-${task.id}`, fromId: agent.id, toId: task.id, type: "task" });
+    });
+  });
+
+  const depthByAgent = new Map<string, number>();
+  agents.forEach((agent) => {
+    if (!childIds.has(agent.id)) {
+      assignDepth(agent.id, 0, agents, depthByAgent);
+    }
+  });
+  agents.forEach((agent) => {
+    if (!depthByAgent.has(agent.id)) {
+      assignDepth(agent.id, 0, agents, depthByAgent);
+    }
+  });
+
+  const agentNodes: AgentGraph["nodes"] = agents.map((agent) => {
+    const depth = depthByAgent.get(agent.id) ?? 0;
+    return { id: agent.id, type: "agent", title: agent.name, subtitle: agent.status, status: agent.status, depth, agentId: agent.id };
+  });
+  const taskNodes: AgentGraph["nodes"] = agents.flatMap((agent) => {
+    const depth = depthByAgent.get(agent.id) ?? 0;
+    return (agent.tasks ?? []).map((task) => ({ id: task.id, type: "task" as const, title: task.title, subtitle: task.status, status: task.status, depth: depth + 1, agentId: agent.id }));
+  });
+
+  return { nodes: [...agentNodes, ...taskNodes], edges: Array.from(edges.values()) };
 }
 
 export function mapAgentProfile(item: unknown): AgentProfile {
@@ -166,6 +217,42 @@ function mapApprovalList(value: unknown, fallbackAgentId: string) {
   return (Array.isArray(value) ? value : []).map((item) => mapAgentApproval(item, fallbackAgentId));
 }
 
+function mapRelations(agent: RawRecord) {
+  const parentAgentId = stringValue(agent.parentAgentId) ?? stringValue(agent.parent_agent_id) ?? stringValue(agent.parentId) ?? stringValue(agent.parent_id);
+  const childAgentIds = stringList(agent.childAgentIds ?? agent.child_agent_ids ?? agent.children ?? agent.childAgents);
+  const taskIds = stringList(agent.taskIds ?? agent.task_ids);
+  const taskList = mapTaskList(agent.tasks ?? agent.taskList ?? agent.task_list);
+  const relations = {
+    parentAgentId,
+    childAgentIds,
+    taskIds: taskIds.length ? taskIds : (taskList ?? []).map((task) => task.id)
+  };
+  return relations.parentAgentId || relations.childAgentIds.length || relations.taskIds.length ? relations : undefined;
+}
+
+function mapTaskList(value: unknown): AgentTask[] | undefined {
+  const tasks = recordList(value)
+    .map((task) => compactTask({
+      id: stringValue(task.id) ?? stringValue(task.taskId) ?? stringValue(task.task_id) ?? "",
+      title: stringValue(task.title) ?? stringValue(task.name) ?? stringValue(task.objective) ?? "Task",
+      status: normalizeOptionalStatus(task.status ?? task.state),
+      summary: stringValue(task.summary) ?? stringValue(task.description)
+    }))
+    .filter((task) => task.id);
+  return tasks.length ? tasks : undefined;
+}
+
+function assignDepth(agentId: string, depth: number, agents: AgentSummary[], depthByAgent: Map<string, number>) {
+  const currentDepth = depthByAgent.get(agentId);
+  if (currentDepth !== undefined && currentDepth <= depth) {
+    return;
+  }
+  depthByAgent.set(agentId, depth);
+  const agent = agents.find((item) => item.id === agentId);
+  agent?.relations?.childAgentIds.forEach((childId) => assignDepth(childId, depth + 1, agents, depthByAgent));
+  agents.filter((item) => item.relations?.parentAgentId === agentId).forEach((child) => assignDepth(child.id, depth + 1, agents, depthByAgent));
+}
+
 function mapDecision(item: RawRecord): AgentDecision {
   return {
     id: stringValue(item.id) ?? `decision-${stringValue(item.createdAt) ?? Date.now()}`,
@@ -218,6 +305,13 @@ function normalizeSeverity(value: unknown) {
   return normalized === "warning" || normalized === "error" ? normalized : "info";
 }
 
+function normalizeOptionalStatus(value: unknown): AgentStatus | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  return normalizeAgentStatus(value);
+}
+
 function normalizeRisk(value: unknown) {
   const normalized = String(value ?? "").toLowerCase();
   return normalized === "low" || normalized === "medium" || normalized === "high" ? normalized : undefined;
@@ -265,4 +359,8 @@ function numberValue(value: unknown) {
 
 function booleanValue(value: unknown) {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function compactTask(task: AgentTask): AgentTask {
+  return Object.fromEntries(Object.entries(task).filter(([, value]) => value !== undefined)) as AgentTask;
 }
