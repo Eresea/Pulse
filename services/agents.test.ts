@@ -111,6 +111,48 @@ describe("mapAgentDetail", () => {
     assert.equal(detail.approvals[0].risk, "high");
     assert.equal(detail.timeline[0].type, "blackboard");
   });
+
+  it("tolerates alternate blackboard collection names from Nexus", () => {
+    const detail = mapAgentDetail({
+      agent: { id: "agent-1", name: "Planner", status: "running" },
+      blackboard: {
+        steps: ["Inspect state", "Draft rollout"],
+        currentStep: "Draft rollout",
+        issues: ["Needs approval"],
+        decisionLog: [{ id: "decision-1", summary: "Use staged rollout", reason: "Lower risk" }],
+        outputs: [{ id: "artifact-1", title: "rollout.md", kind: "markdown", href: "https://example.test/rollout.md" }],
+        sources: [{ id: "ref-1", name: "ERE-56", kind: "issue", href: "https://linear.app/eresea/issue/ERE-56" }],
+        activity: ["Created rollout draft"]
+      }
+    });
+
+    assert.deepEqual(detail.blackboard.plan, ["Inspect state", "Draft rollout"]);
+    assert.equal(detail.blackboard.activeStep, "Draft rollout");
+    assert.deepEqual(detail.blackboard.blockers, ["Needs approval"]);
+    assert.equal(detail.blackboard.decisions[0].title, "Use staged rollout");
+    assert.equal(detail.blackboard.artifacts[0].type, "markdown");
+    assert.equal(detail.blackboard.artifacts[0].url, "https://example.test/rollout.md");
+    assert.equal(detail.blackboard.contextReferences[0].type, "issue");
+    assert.equal(detail.blackboard.contextReferences[0].url, "https://linear.app/eresea/issue/ERE-56");
+    assert.deepEqual(detail.blackboard.recentUpdates, ["Created rollout draft"]);
+  });
+
+  it("sorts timeline events newest first and keeps resolved approvals out of pending attention", () => {
+    const detail = mapAgentDetail({
+      agent: { id: "agent-1", name: "Planner", status: "running" },
+      approvals: [
+        { id: "approval-1", status: "approved", title: "Already handled" },
+        { id: "approval-2", status: "pending", title: "Needs review" }
+      ],
+      timeline: [
+        { id: "older", type: "message", created_at: "2026-06-02T20:00:00Z" },
+        { id: "newer", kind: "blackboard", createdAt: "2026-06-02T21:00:00Z" }
+      ]
+    });
+
+    assert.deepEqual(detail.timeline.map((event) => event.id), ["newer", "older"]);
+    assert.deepEqual(detail.approvals.map((approval) => approval.status), ["approved", "pending"]);
+  });
 });
 
 describe("mapAgentTimelineEvent", () => {

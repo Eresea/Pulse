@@ -1,8 +1,9 @@
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
-import { AlertCircle, Bot, ChevronRight, CirclePause, Clock3, OctagonAlert, Play, RefreshCcw, ServerOff, ShieldAlert, Square } from "lucide-react-native";
+import { Bot, RefreshCcw, ServerOff, ShieldAlert } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AgentCompactRow, ApprovalCard } from "@/components/agents/agent-command-ui";
 import { PageHeader } from "@/components/drawer-shell";
 import { Screen, ScreenScrollView } from "@/components/screen";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
-import type { AgentApprovalRequest, AgentStatus, AgentSummary } from "@/services/types";
+import type { AgentApprovalRequest } from "@/services/types";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
-
-const attentionStatuses: AgentStatus[] = ["waiting_input", "blocked", "failed"];
 
 export default function AgentsScreen() {
   const { agents, actions } = useAppState();
@@ -192,9 +191,7 @@ export default function AgentsScreen() {
               </View>
             </CardHeader>
             <CardContent className="gap-3">
-              {agents.pendingApprovals.map((approval) => (
-                <ApprovalRow key={approval.id} approval={approval} submitting={respondingApprovalId === approval.id} onRespond={respondToApproval} />
-              ))}
+              {agents.pendingApprovals.map((approval) => <ApprovalCard key={approval.id} approval={approval} submitting={respondingApprovalId === approval.id} onRespond={respondToApproval} />)}
             </CardContent>
           </Card>
         ) : null}
@@ -210,7 +207,7 @@ export default function AgentsScreen() {
                 <Text className="text-sm text-muted-foreground dark:text-slate-400">Loading agents</Text>
               </View>
             ) : agents.items.length ? (
-              agents.items.map((agent) => <AgentRow key={agent.id} agent={agent} />)
+              agents.items.map((agent) => <AgentCompactRow key={agent.id} agent={agent} trailing="status" onPress={() => router.push(agentHref(agent.id))} />)
             ) : (
               <View className="items-center gap-2 rounded-md border border-dashed border-border bg-background p-5 dark:border-neutral-800 dark:bg-black">
                 <Bot color={colors.muted} size={24} />
@@ -237,113 +234,6 @@ function Metric({ label, value, attention = false, danger = false }: { label: st
       <Text className="text-xs font-semibold uppercase text-muted-foreground dark:text-slate-400">{label}</Text>
     </View>
   );
-}
-
-function AgentRow({ agent }: { agent: AgentSummary }) {
-  const { colors } = useTheme();
-  const Icon = statusIcon(agent.status);
-  const progress = formatProgress(agent);
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Open ${agent.name}`} className={cn("rounded-md border border-border bg-background p-3 dark:border-neutral-800 dark:bg-black", agent.needsAttention && "border-amber-300 dark:border-amber-900")} onPress={() => router.push(agentHref(agent.id))}>
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="min-w-0 flex-1 flex-row gap-3">
-          <View className={cn("size-10 items-center justify-center rounded-full bg-muted dark:bg-slate-800", agent.status === "running" && "bg-primary")}>
-            <Icon color={agent.status === "running" ? colors.primaryForeground : statusColor(agent.status)} size={18} />
-          </View>
-          <View className="min-w-0 flex-1 gap-1">
-            <View className="flex-row items-center gap-2">
-              <Text className="min-w-0 flex-1 text-sm font-semibold text-foreground dark:text-slate-100" numberOfLines={1}>{agent.name}</Text>
-              {agent.needsAttention ? <AlertCircle color="#d97706" size={15} /> : null}
-            </View>
-            <Text className="text-sm text-muted-foreground dark:text-slate-400" numberOfLines={2}>{agent.objective ?? "No objective reported"}</Text>
-            {agent.profileName ? <Text className="text-xs font-semibold text-primary" numberOfLines={1}>{agent.profileName}</Text> : null}
-            <Text className="text-xs text-muted-foreground dark:text-slate-500" numberOfLines={1}>{[agent.location, agent.runtime, progress].filter(Boolean).join(" - ")}</Text>
-          </View>
-        </View>
-        <View className="items-end gap-2">
-          <StatusBadge status={agent.status} />
-          <ChevronRight color={colors.muted} size={17} />
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-
-function ApprovalRow({ approval, submitting, onRespond }: { approval: AgentApprovalRequest; submitting: boolean; onRespond: (approval: AgentApprovalRequest, accepted: boolean) => void }) {
-  return (
-    <View className="gap-2 rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-950 dark:bg-red-950/40">
-      <View className="flex-row items-start justify-between gap-3">
-        <View className="min-w-0 flex-1">
-          <Text className="text-sm font-semibold text-red-700 dark:text-red-300">{approval.title}</Text>
-          <Text className="text-sm leading-5 text-red-700 dark:text-red-200">{approval.body}</Text>
-        </View>
-        {approval.risk ? <Badge variant="outline" className="border-red-200 text-red-700 dark:border-red-900 dark:text-red-300">{approval.risk}</Badge> : null}
-      </View>
-      <View className="flex-row gap-2">
-        <Button className="h-9 flex-1 bg-red-600" disabled={submitting} onPress={() => onRespond(approval, true)}>{approval.confirmLabel ?? "Approve"}</Button>
-        <Button className="h-9 flex-1 border-red-200 dark:border-red-800" disabled={submitting} variant="outline" textClassName="text-red-700 dark:text-red-200" onPress={() => onRespond(approval, false)}>{approval.cancelLabel ?? "Reject"}</Button>
-      </View>
-    </View>
-  );
-}
-
-function StatusBadge({ status }: { status: AgentStatus }) {
-  const danger = status === "failed";
-  const attention = attentionStatuses.includes(status);
-  return (
-    <Badge variant={status === "running" ? "default" : "outline"} className={cn(danger && "border-red-200 text-red-700 dark:border-red-900 dark:text-red-300", attention && !danger && "border-amber-300 text-amber-700 dark:border-amber-900 dark:text-amber-300")}>
-      {statusLabel(status)}
-    </Badge>
-  );
-}
-
-function statusIcon(status: AgentStatus) {
-  switch (status) {
-    case "running":
-      return Play;
-    case "waiting_input":
-      return ShieldAlert;
-    case "blocked":
-      return OctagonAlert;
-    case "paused":
-      return CirclePause;
-    case "failed":
-      return AlertCircle;
-    case "completed":
-      return Square;
-    default:
-      return Clock3;
-  }
-}
-
-function statusColor(status: AgentStatus) {
-  if (status === "failed") {
-    return "#dc2626";
-  }
-  if (attentionStatuses.includes(status)) {
-    return "#d97706";
-  }
-  return "#64748b";
-}
-
-function statusLabel(status: AgentStatus) {
-  return status.replace("_", " ");
-}
-
-function formatProgress(agent: AgentSummary) {
-  if (!agent.progress) {
-    return undefined;
-  }
-  if (agent.progress.label) {
-    return agent.progress.label;
-  }
-  if (agent.progress.percent !== undefined) {
-    return `${agent.progress.percent}%`;
-  }
-  if (agent.progress.current !== undefined && agent.progress.total !== undefined) {
-    return `${agent.progress.current}/${agent.progress.total}`;
-  }
-  return undefined;
 }
 
 function agentHref(agentId: string): Href {

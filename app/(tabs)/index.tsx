@@ -1,8 +1,9 @@
-import { Activity, Bot, ChevronRight, MessageCirclePlus, MoreVertical, Radio, RefreshCcw, ShieldCheck, Smartphone, Trash2, Workflow } from "lucide-react-native";
+import { Activity, AlertCircle, Bot, ChevronRight, MessageCirclePlus, MoreVertical, Radio, RefreshCcw, ShieldAlert, ShieldCheck, Smartphone, Trash2, Workflow } from "lucide-react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { AgentCompactRow, ApprovalCard } from "@/components/agents/agent-command-ui";
 import { Screen, ScreenScrollView } from "@/components/screen";
 import { ActionSheet } from "@/components/ui/action-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/drawer-shell";
 import { cn } from "@/lib/cn";
 import { triggerLongPressFeedback, triggerTapFeedback } from "@/lib/tactile-feedback";
-import type { AiChatThread } from "@/services/types";
+import type { AgentApprovalRequest, AiChatThread } from "@/services/types";
 import { useAppState } from "@/state/app-state";
 import { useTheme } from "@/theme/theme";
 
@@ -19,9 +20,15 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const [creating, setCreating] = useState(false);
   const [actionThread, setActionThread] = useState<AiChatThread | undefined>();
+  const [respondingApprovalId, setRespondingApprovalId] = useState<string | undefined>();
   const didLoadThreads = useRef(false);
+  const didLoadAgents = useRef(false);
   const recentThreads = aiChat.threads.slice(0, 5);
   const latestThread = recentThreads[0];
+  const attentionAgents = agents.items.filter((agent) => agent.needsAttention || agent.status === "waiting_input" || agent.status === "blocked" || agent.status === "failed");
+  const activeAgents = agents.items.filter((agent) => agent.status === "running" || agent.status === "waiting_input" || agent.status === "blocked");
+  const leadAgent = attentionAgents[0] ?? activeAgents[0] ?? agents.items[0];
+  const leadApproval = agents.pendingApprovals[0];
 
   const loadThreads = useCallback(() => {
     void actions.loadAiThreads().catch(() => undefined);
@@ -35,6 +42,15 @@ export default function HomeScreen() {
     loadThreads();
   }, [loadThreads]);
 
+  useEffect(() => {
+    if (didLoadAgents.current) {
+      return;
+    }
+    didLoadAgents.current = true;
+    void actions.loadAgentProfiles().catch(() => undefined);
+    void actions.loadAgents().catch(() => undefined);
+  }, [actions]);
+
   const createThread = async () => {
     setCreating(true);
     try {
@@ -44,6 +60,17 @@ export default function HomeScreen() {
       // App state owns the user-facing AI error message.
     } finally {
       setCreating(false);
+    }
+  };
+
+  const respondToApproval = async (approval: AgentApprovalRequest, accepted: boolean) => {
+    setRespondingApprovalId(approval.id);
+    try {
+      await actions.respondToAgentApproval(approval.id, accepted);
+    } catch {
+      // App state owns the user-facing error message.
+    } finally {
+      setRespondingApprovalId(undefined);
     }
   };
 
@@ -72,6 +99,41 @@ export default function HomeScreen() {
           {latestThread ? <ThreadAction thread={latestThread} onOpenActions={() => setActionThread(latestThread)} /> : null}
         </View>
 
+        <SectionHeader title="Agent command" actionLabel="Agents" accessibilityLabel="Open agents" onPress={() => router.push("/(tabs)/agents" as Href)} />
+        <View className="gap-3">
+          <View className="flex-row flex-wrap gap-2">
+            <AgentMetric label="Approvals" value={agents.pendingApprovals.length} urgent={agents.pendingApprovals.length > 0} />
+            <AgentMetric label="Waiting" value={agents.items.filter((agent) => agent.status === "waiting_input").length} urgent />
+            <AgentMetric label="Blocked" value={agents.items.filter((agent) => agent.status === "blocked").length} urgent />
+            <AgentMetric label="Active" value={activeAgents.length} />
+          </View>
+          {leadApproval ? (
+            <View className="gap-2">
+              <View className="flex-row items-center gap-2">
+                <ShieldAlert color="#dc2626" size={18} />
+                <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Needs approval</Text>
+              </View>
+              <ApprovalCard approval={leadApproval} compact submitting={respondingApprovalId === leadApproval.id} onRespond={respondToApproval} />
+            </View>
+          ) : leadAgent ? (
+            <AgentCompactRow agent={leadAgent} trailing="status" onPress={() => router.push(agentHref(leadAgent.id))} />
+          ) : (
+            <Pressable accessibilityRole="button" accessibilityLabel="Open agents" className="flex-row items-center justify-between gap-3 border-y border-border py-4 dark:border-neutral-800" onPress={() => router.push("/(tabs)/agents" as Href)}>
+              <View className="min-w-0 flex-1 flex-row items-center gap-3">
+                <View className="size-10 items-center justify-center rounded-full bg-muted dark:bg-slate-800">
+                  <Workflow color={colors.icon} size={19} />
+                </View>
+                <View className="min-w-0 flex-1 gap-1">
+                  <Text className="text-sm font-semibold text-foreground dark:text-slate-100">No active agents</Text>
+                  <Text className="text-sm leading-5 text-muted-foreground dark:text-slate-400" numberOfLines={2}>Spawn or stage an agent when you need mobile oversight.</Text>
+                </View>
+              </View>
+              <ChevronRight color={colors.muted} size={17} />
+            </Pressable>
+          )}
+          {agents.error && !agents.apiUnavailable ? <Text className="text-sm text-red-600 dark:text-red-400">{agents.error}</Text> : null}
+        </View>
+
         <SectionHeader title="Continue" actionLabel="All chats" accessibilityLabel="Open all AI chats" onPress={() => router.push("/(tabs)/chat" as Href)} />
         <View className="gap-0">
           {aiChat.error ? <Text className="pb-3 text-sm text-red-600 dark:text-red-400">{aiChat.error}</Text> : null}
@@ -98,7 +160,7 @@ export default function HomeScreen() {
           )}
         </View>
 
-        <SectionHeader title="Activity" actionLabel="Agents" accessibilityLabel="Open agents" onPress={() => router.push("/(tabs)/agents" as Href)} />
+        <SectionHeader title="Activity" actionLabel="Inbox" accessibilityLabel="Open inbox" onPress={() => router.push("/(tabs)/inbox" as Href)} />
         <Pressable accessibilityRole="button" accessibilityLabel="Open agents" className="flex-row items-center justify-between gap-3 border-y border-border py-4 dark:border-neutral-800" onPress={() => router.push("/(tabs)/agents" as Href)}>
           <View className="min-w-0 flex-1 flex-row items-center gap-3">
             <View className="size-10 items-center justify-center rounded-full bg-muted dark:bg-slate-800">
@@ -107,7 +169,7 @@ export default function HomeScreen() {
             <View className="min-w-0 flex-1 gap-1">
               <Text className="text-sm font-semibold text-foreground dark:text-slate-100">Agent command stream</Text>
               <Text className="text-sm leading-5 text-muted-foreground dark:text-slate-400" numberOfLines={2}>
-                Running agents, approvals, and blackboard updates.
+                Running agents, approvals, and blackboard updates route through Agents and Inbox.
               </Text>
             </View>
           </View>
@@ -153,6 +215,19 @@ export default function HomeScreen() {
         visible={Boolean(actionThread)}
       />
     </Screen>
+  );
+}
+
+function AgentMetric({ label, value, urgent = false }: { label: string; value: number; urgent?: boolean }) {
+  const activeUrgent = urgent && value > 0;
+  return (
+    <View className={cn("min-w-[47%] flex-1 rounded-md border border-border bg-card p-3 dark:border-neutral-800 dark:bg-black", activeUrgent && "border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30")}>
+      <View className="flex-row items-center justify-between gap-2">
+        <Text className={cn("text-2xl font-bold text-foreground dark:text-slate-100", activeUrgent && "text-amber-700 dark:text-amber-300")}>{value}</Text>
+        {activeUrgent ? <AlertCircle color="#d97706" size={17} /> : null}
+      </View>
+      <Text className="text-xs font-semibold uppercase text-muted-foreground dark:text-slate-400">{label}</Text>
+    </View>
   );
 }
 
@@ -311,6 +386,10 @@ function StatusRow({
 
 function threadHref(threadId: string): Href {
   return { pathname: "/(tabs)/chat/[threadId]", params: { threadId } } as unknown as Href;
+}
+
+function agentHref(agentId: string): Href {
+  return { pathname: "/(tabs)/agents/[agentId]", params: { agentId } } as unknown as Href;
 }
 
 function formatThreadTime(value?: string) {

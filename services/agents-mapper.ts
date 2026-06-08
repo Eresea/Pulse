@@ -147,13 +147,13 @@ function mapBlackboard(value: unknown): AgentBlackboard {
   const blackboard = asRecord(value);
   return {
     objective: stringValue(blackboard.objective) ?? stringValue(blackboard.goal),
-    plan: stringList(blackboard.plan),
-    activeStep: stringValue(blackboard.activeStep) ?? stringValue(blackboard.active_step),
-    decisions: recordList(blackboard.decisions).map(mapDecision),
-    blockers: stringList(blackboard.blockers),
-    artifacts: recordList(blackboard.artifacts).map(mapArtifact),
-    contextReferences: recordList(blackboard.contextReferences ?? blackboard.context_references ?? blackboard.references).map(mapReference),
-    recentUpdates: stringList(blackboard.recentUpdates ?? blackboard.recent_updates ?? blackboard.updates),
+    plan: stringList(blackboard.plan ?? blackboard.steps ?? blackboard.currentPlan ?? blackboard.current_plan),
+    activeStep: stringValue(blackboard.activeStep) ?? stringValue(blackboard.active_step) ?? stringValue(blackboard.currentStep) ?? stringValue(blackboard.current_step),
+    decisions: recordList(blackboard.decisions ?? blackboard.decisionLog ?? blackboard.decision_log).map(mapDecision),
+    blockers: stringList(blackboard.blockers ?? blackboard.issues ?? blackboard.blockingIssues ?? blackboard.blocking_issues),
+    artifacts: recordList(blackboard.artifacts ?? blackboard.outputs ?? blackboard.files).map(mapArtifact),
+    contextReferences: recordList(blackboard.contextReferences ?? blackboard.context_references ?? blackboard.references ?? blackboard.sources).map(mapReference),
+    recentUpdates: stringList(blackboard.recentUpdates ?? blackboard.recent_updates ?? blackboard.updates ?? blackboard.activity),
     updatedAt: stringValue(blackboard.updatedAt) ?? stringValue(blackboard.updated_at)
   };
 }
@@ -180,8 +180,8 @@ function mapArtifact(item: unknown): AgentArtifact {
   return {
     id: stringValue(artifact.id) ?? `artifact-${stringValue(artifact.createdAt) ?? Date.now()}`,
     title: stringValue(artifact.title) ?? stringValue(artifact.name) ?? "Artifact",
-    type: stringValue(artifact.type),
-    url: stringValue(artifact.url),
+    type: stringValue(artifact.type) ?? stringValue(artifact.kind),
+    url: stringValue(artifact.url) ?? stringValue(artifact.href),
     summary: stringValue(artifact.summary),
     createdAt: stringValue(artifact.createdAt) ?? stringValue(artifact.created_at)
   };
@@ -189,10 +189,10 @@ function mapArtifact(item: unknown): AgentArtifact {
 
 function mapReference(item: RawRecord): AgentContextReference {
   return {
-    id: stringValue(item.id) ?? stringValue(item.url) ?? `reference-${Date.now()}`,
-    title: stringValue(item.title) ?? stringValue(item.name) ?? stringValue(item.url) ?? "Reference",
-    type: stringValue(item.type),
-    url: stringValue(item.url),
+    id: stringValue(item.id) ?? stringValue(item.url) ?? stringValue(item.href) ?? `reference-${Date.now()}`,
+    title: stringValue(item.title) ?? stringValue(item.name) ?? stringValue(item.url) ?? stringValue(item.href) ?? "Reference",
+    type: stringValue(item.type) ?? stringValue(item.kind),
+    url: stringValue(item.url) ?? stringValue(item.href),
     summary: stringValue(item.summary)
   };
 }
