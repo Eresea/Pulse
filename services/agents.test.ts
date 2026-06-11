@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildAgentGraph, mapAgentDetail, mapAgentList, mapAgentProfileList, mapAgentTimelineEvent, normalizeAgentStatus } from "@/services/agents-mapper";
+import { buildAgentGraph, mapAgentDetail, mapAgentList, mapAgentProfileList, mapAgentTimelineEvent, mapBlackboardAgents, normalizeAgentStatus } from "@/services/agents-mapper";
 
 describe("normalizeAgentStatus", () => {
   it("normalizes Nexus status variants into the Pulse status model", () => {
     assert.equal(normalizeAgentStatus("waiting input"), "waiting_input");
     assert.equal(normalizeAgentStatus("blocked"), "blocked");
     assert.equal(normalizeAgentStatus("unknown"), "idle");
+  });
+});
+
+describe("mapBlackboardAgents", () => {
+  it("joins board agents with their latest objectives and tasks", () => {
+    const agents = mapBlackboardAgents({
+      blackboard: { id: "bb-1" },
+      agents: [{ id: "agent-1", displayName: "Planner", status: "running", runtimeSelection: { model: "gpt-5" } }],
+      tasks: [{ id: "task-1", title: "Draft plan", assigneeAgentId: "agent-1", status: "in_progress" }]
+    }, [{ id: "obj-1", agentId: "agent-1", prompt: "Ship ERE-59", status: "running", updatedAt: "2026-06-11T10:00:00Z" }]);
+    assert.equal(agents[0].objective, "Ship ERE-59");
+    assert.equal(agents[0].tasks?.[0].id, "task-1");
   });
 });
 

@@ -54,6 +54,27 @@ export function mapAgentList(result: unknown): AgentSummary[] {
   return source.map(mapAgentSummary).filter((agent) => agent.id);
 }
 
+export function mapBlackboardAgents(detailValue: unknown, objectiveValues: unknown[]): AgentSummary[] {
+  const detail = asRecord(detailValue);
+  const blackboard = asRecord(detail.blackboard);
+  const tasks = recordList(detail.tasks);
+  return recordList(detail.agents).map(agent => {
+    const latest = objectiveValues
+      .map(asRecord)
+      .filter(objective => stringValue(objective.agentId) === stringValue(agent.id))
+      .sort((a, b) => String(b.updatedAt ?? "").localeCompare(String(a.updatedAt ?? "")))[0];
+    const summary = mapAgentSummary({
+      ...agent,
+      name: agent.displayName ?? agent.label,
+      model: asRecord(agent.runtimeSelection).model ?? agent.model,
+      objective: latest?.prompt,
+      status: latest?.status ?? agent.status,
+      tasks: tasks.filter(task => stringValue(task.assigneeAgentId) === stringValue(agent.id))
+    });
+    return { ...summary, blackboardId: stringValue(blackboard.id), objectiveId: stringValue(latest?.id) };
+  }).filter(agent => agent.id);
+}
+
 export function buildAgentGraph(agents: AgentSummary[]): AgentGraph {
   const agentIds = new Set(agents.map((agent) => agent.id));
   const childIds = new Set<string>();

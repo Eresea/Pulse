@@ -41,14 +41,16 @@ export const appConfig = {
     chatStream: "/api/v1/ai/chat/stream"
   },
   agents: {
-    list: "/api/v1/agents",
-    profiles: "/api/v1/agents/profiles",
-    detail: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}`,
-    messages: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/messages`,
-    pause: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/pause`,
-    resume: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/resume`,
-    stop: (agentId: string) => `/api/v1/agents/${encodeURIComponent(agentId)}/stop`,
-    approval: (approvalId: string) => `/api/v1/agents/approvals/${encodeURIComponent(approvalId)}`
+    boards: "/api/v1/blackboards",
+    board: (boardId: string) => `/api/v1/blackboards/${encodeURIComponent(boardId)}`,
+    profiles: "/api/v1/agent-profiles",
+    instances: (boardId: string) => `/api/v1/blackboards/${encodeURIComponent(boardId)}/agent-instances`,
+    objectives: (boardId: string) => `/api/v1/blackboards/${encodeURIComponent(boardId)}/objectives`,
+    objective: (boardId: string, objectiveId: string) => `/api/v1/blackboards/${encodeURIComponent(boardId)}/objectives/${encodeURIComponent(objectiveId)}`,
+    objectiveAction: (objectiveId: string, action: string) => `/api/v1/objectives/${encodeURIComponent(objectiveId)}/${action}`,
+    plan: (objectiveId: string) => `/api/v1/objectives/${encodeURIComponent(objectiveId)}/plan`,
+    commands: (boardId: string) => `/api/v1/blackboards/${encodeURIComponent(boardId)}/commands`,
+    approval: (actionId: string, approvalId: string) => `/api/v1/actions/${encodeURIComponent(actionId)}/approvals/${encodeURIComponent(approvalId)}`
   },
   sync: {
     events: undefined as string | undefined

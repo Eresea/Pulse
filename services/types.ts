@@ -339,6 +339,8 @@ export type AgentSummary = {
   updatedAt?: string;
   relations?: AgentRelations;
   tasks?: AgentTask[];
+  blackboardId?: string;
+  objectiveId?: string;
 };
 
 export type AgentGraphNode = {
@@ -386,6 +388,7 @@ export type AgentSpawnRequest = {
   profileId?: string;
   runtime?: string;
   location?: string;
+  blackboardId?: string;
 };
 
 export type AgentInstructionRequest = {
